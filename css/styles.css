@@ -417,7 +417,14 @@ body {
   border-radius: 4px;
   border: 1px solid var(--border);
 }
-.mask-badge.has { border-color: var(--ok); color: var(--ok); }
+/* "has" badges use the same rank-tier colors as passive-chip elsewhere in
+   the app (roster, pickers), so a passive reads the same way everywhere
+   instead of always showing as a generic green checkmark. */
+.mask-badge.has.tier-worldtree { border-color: #a374f0; color: #cbb0f5; background: #241c33; }
+.mask-badge.has.tier-rainbow { border-color: #5cf1e2; color: #8ff5e8; background: #16302c; }
+.mask-badge.has.tier-gold { border-color: #ffdd00; color: #f2d76b; background: #2e2a12; }
+.mask-badge.has.tier-neutral { border-color: var(--border); color: var(--text-muted); }
+.mask-badge.has.tier-negative { border-color: #7a3f3f; color: #d68f8f; background: #2a1c1c; }
 .mask-badge.missing { color: var(--text-muted); text-decoration: line-through; }
 .mask-badge.junk { color: var(--text-muted); }
 

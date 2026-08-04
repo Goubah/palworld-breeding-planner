@@ -5,7 +5,7 @@
 
 import { getPals, getMeta, palByInternal } from '../data.js';
 import * as store from '../store.js';
-import { renderPalIcon, attachTooltip } from './shared.js';
+import { renderPalIcon, attachTooltip, passiveTierClass } from './shared.js';
 
 let worker = null;
 let statusEl, cancelBtn, listEl;
@@ -215,7 +215,11 @@ function renderNodeHeader(node, desiredPassives) {
   for (let b = 0; b < desiredPassives.length; b++) {
     const has = (node.mask & (1 << b)) !== 0;
     const badge = document.createElement('span');
-    badge.className = 'mask-badge ' + (has ? 'has' : 'missing');
+    // "has" gets the same rank-tier color used everywhere else (roster,
+    // pickers) so it reads as the actual passive, not a generic green
+    // checkmark; "missing" stays a plain muted strikethrough since there's
+    // no passive present yet to color.
+    badge.className = 'mask-badge ' + (has ? 'has ' + passiveTierClass(desiredPassives[b].rank) : 'missing');
     badge.textContent = desiredPassives[b].name;
     attachTooltip(badge, desiredPassives[b].description);
     header.appendChild(badge);
