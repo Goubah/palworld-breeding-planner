@@ -3,7 +3,35 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Palworld Breeding Route Planner</title>
+
+<title>Palworld Breeding Calculator &amp; Passive Skill Route Planner</title>
+<meta name="description" content="Free Palworld breeding calculator that plans multi-generation routes from the Pals you already own, with real passive-skill odds and egg estimates.">
+<link rel="canonical" href="https://goubah.github.io/palworld-breeding-planner/">
+
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Palworld Breeding Route Planner">
+<meta property="og:title" content="Palworld Breeding Calculator &amp; Passive Skill Route Planner">
+<meta property="og:description" content="Plan multi-generation Palworld breeding routes starting from the Pals you already own, with real passive-skill inheritance odds.">
+<meta property="og:url" content="https://goubah.github.io/palworld-breeding-planner/">
+<meta name="twitter:card" content="summary_large_image">
+
+<!-- Describes the page to search engines. Deliberately no aggregateRating:
+     inventing review scores is both dishonest and something Google
+     penalises when it can't find matching on-page reviews. -->
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "WebApplication",
+  "name": "Palworld Breeding Route Planner",
+  "url": "https://goubah.github.io/palworld-breeding-planner/",
+  "applicationCategory": "GameApplication",
+  "operatingSystem": "Any modern web browser",
+  "description": "A Palworld breeding calculator that searches multi-generation breeding routes starting only from the Pals you already own, modelling passive-skill inheritance probabilities, gender ratios and expected egg counts.",
+  "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+  "isAccessibleForFree": true
+}
+</script>
+
 <link rel="stylesheet" href="css/styles.css">
 </head>
 <body>
@@ -11,6 +39,8 @@
 
 <header class="app-header">
   <h1>Palworld Breeding Route Planner</h1>
+  <p class="app-tagline">A Palworld breeding calculator that works backwards from the Pals you
+  actually own &mdash; including the passive skills you want the child to inherit.</p>
 </header>
 
 <main class="app-main">
@@ -29,6 +59,44 @@
     <summary>Advanced Settings</summary>
     <div id="settings-mount"></div>
   </details>
+
+  <!-- Static, crawlable prose. The rest of this page is built by JS at
+       runtime, which leaves a search engine almost no text to understand the
+       page by. This is also the honest pitch for what makes the tool
+       different, so it earns its place for readers too. -->
+  <section class="page-section about-section">
+    <h2>About this breeding calculator</h2>
+    <p>
+      Most Palworld breeding calculators answer &ldquo;what do these two Pals make?&rdquo; or
+      &ldquo;which pairs produce this Pal?&rdquo;. This one starts from the opposite end: you
+      enter the Pals you already own, along with their genders and passive skills, then name a
+      target Pal and up to four passive skills you want it to end up with. It searches
+      multi-generation breeding routes that begin only from your roster &mdash; no assuming you
+      can go catch a perfect parent.
+    </p>
+    <h3>Passive skills are part of the search, not an afterthought</h3>
+    <p>
+      Passive skill inheritance is modelled on the game&rsquo;s own numbers: a child draws its
+      passives from the combined pool of both parents on a 40/30/20/10 weighting, with random
+      passives filling any remaining slots. Every step of a route shows the real chance per egg,
+      how many eggs you should expect to hatch, and a rough time estimate, so you can tell a
+      one-hour plan from a twenty-hour one before committing to it.
+    </p>
+    <h3>Gender ratios and Pal Reversers</h3>
+    <p>
+      Breeding needs one male and one female, and many species are heavily gender-skewed, so
+      gender is priced into every step rather than ignored. Where a pairing only works by
+      flipping a Pal&rsquo;s gender with a Pal Reverser, the route says so explicitly instead of
+      quietly pretending the pairing is free.
+    </p>
+    <h3>Runs entirely in your browser</h3>
+    <p>
+      The breeding table is derived from the game&rsquo;s own data files. Everything &mdash;
+      your roster and the whole search &mdash; stays in your browser; nothing is uploaded, and
+      there is no account to make. Results come from a heuristic search, so they are good
+      routes rather than proven-optimal ones.
+    </p>
+  </section>
 </main>
 
 <footer class="app-footer">

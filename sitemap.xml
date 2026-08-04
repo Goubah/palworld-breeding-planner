@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Submit this directly in Google Search Console (Sitemaps > enter "sitemap.xml").
+
+  It is NOT referenced from a robots.txt: robots.txt is only read at a domain's
+  root (https://goubah.github.io/robots.txt), which this project doesn't
+  control -- that would need a separate repo named "goubah.github.io". Nothing
+  is lost by that, since no robots.txt at all means nothing is disallowed.
+
+  Single-page app, so there is exactly one URL. Update <lastmod> when the page
+  itself meaningfully changes; it is a hint, not a ranking factor.
+-->
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url>
+    <loc>https://goubah.github.io/palworld-breeding-planner/</loc>
+    <lastmod>2026-08-04</lastmod>
+    <changefreq>monthly</changefreq>
+  </url>
+</urlset>

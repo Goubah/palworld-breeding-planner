@@ -456,6 +456,23 @@ body {
   text-align: center;
 }
 
+/* Intro line under the H1, and the static explanatory prose at the bottom of
+   the page. Kept visually quiet so the tool itself stays the focus. */
+.app-tagline {
+  margin: 0.4rem 0 0;
+  color: var(--text-muted);
+  font-size: 0.95rem;
+  max-width: 60ch;
+}
+.about-section { color: var(--text-muted); font-size: 0.9rem; }
+.about-section h2 { margin-bottom: 0.5rem; }
+.about-section h3 {
+  margin: 1.1rem 0 0.3rem;
+  font-size: 0.95rem;
+  color: var(--text);
+}
+.about-section p { margin: 0.4rem 0; max-width: 70ch; line-height: 1.6; }
+
 @media (max-width: 600px) {
   .app-main { padding: 0.75rem; }
 }
