@@ -1,0 +1,393 @@
+:root {
+  --bg: #14161c;
+  --bg-elevated: #1c1f28;
+  --bg-input: #23273233;
+  --bg-input-solid: #232733;
+  --border: #333a4a;
+  --text: #e4e6ec;
+  --text-muted: #9aa0b0;
+  --accent: #6fa8dc;
+  --accent-strong: #4a86c8;
+  --ok: #5cb85c;
+  --warn: #e0a800;
+  --error: #e05c5c;
+  --radius: 8px;
+}
+
+* { box-sizing: border-box; }
+
+/* The `hidden` attribute must always win over any explicit `display` an
+   author rule sets (e.g. `.loading-overlay { display: flex }`), otherwise
+   toggling `.hidden = true` in JS silently does nothing. Browsers differ on
+   which side wins when specificity ties, so this is pinned explicitly. */
+[hidden] { display: none !important; }
+
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+}
+
+.app-header {
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-elevated);
+}
+.app-header h1 {
+  margin: 0;
+  font-size: 1.3rem;
+}
+
+.app-main {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 1.25rem;
+}
+
+.page-section {
+  margin-bottom: 2rem;
+}
+.page-section > h2 {
+  font-size: 1.15rem;
+  margin: 0 0 0.85rem;
+  padding-bottom: 0.4rem;
+  border-bottom: 2px solid var(--border);
+}
+
+.settings-details {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.25rem 1.1rem;
+}
+.settings-details > summary {
+  cursor: pointer;
+  padding: 0.75rem 0;
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: var(--text);
+}
+.settings-details[open] > summary {
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 0.75rem;
+}
+.settings-details .card {
+  border: none;
+  padding: 0;
+  margin-bottom: 0.5rem;
+  background: transparent;
+}
+
+.app-footer {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 1rem 1.25rem 2rem;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+}
+
+.card {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1rem 1.1rem;
+  margin-bottom: 1rem;
+}
+.card h3 { margin: 0 0 0.75rem; font-size: 1.05rem; }
+.card h4 { margin: 0 0 0.5rem; font-size: 0.98rem; }
+
+.form-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  margin-bottom: 0.85rem;
+}
+.form-row label { font-size: 0.85rem; color: var(--text-muted); }
+.form-row input[type="number"] {
+  background: var(--bg-input-solid);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 6px;
+  padding: 0.4rem 0.6rem;
+  width: 8rem;
+}
+.hint { margin: 0.15rem 0 0; font-size: 0.78rem; color: var(--text-muted); }
+
+.gender-toggle { display: flex; gap: 0.4rem; }
+.gender-btn {
+  background: var(--bg-input-solid);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  padding: 0.4rem 0.9rem;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.gender-btn.active { color: var(--text); border-color: var(--accent); background: #2a3548; }
+.gender-icon.male { color: #6fa8dc; }
+.gender-icon.female { color: #e08fc0; }
+
+.passives-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 0.5rem;
+}
+@media (max-width: 480px) {
+  .passives-grid { grid-template-columns: 1fr; }
+}
+
+.btn {
+  background: var(--bg-input-solid);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 0.5rem 1rem;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  margin-right: 0.4rem;
+}
+.btn:hover { border-color: var(--accent); }
+.btn-primary { background: var(--accent-strong); border-color: var(--accent-strong); color: #0b1220; font-weight: 600; }
+.btn-primary:hover { background: var(--accent); }
+.btn-primary:disabled { background: #3a4152; border-color: #3a4152; color: var(--text-muted); cursor: not-allowed; }
+.btn-large { padding: 0.7rem 1.4rem; font-size: 1rem; }
+.btn-small { padding: 0.3rem 0.6rem; font-size: 0.8rem; }
+.btn-danger { border-color: var(--error); color: var(--error); }
+.btn-secondary { }
+
+.io-card { display: flex; gap: 0.5rem; align-items: center; }
+
+/* Picker component */
+.picker { position: relative; max-width: 420px; }
+.picker-input-wrap { position: relative; display: flex; align-items: center; }
+.picker-input {
+  width: 100%;
+  background: var(--bg-input-solid);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 6px;
+  padding: 0.45rem 1.8rem 0.45rem 0.6rem;
+  font-size: 0.9rem;
+}
+.picker-clear {
+  position: absolute;
+  right: 0.4rem;
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 1.1rem;
+  cursor: pointer;
+  line-height: 1;
+}
+.picker-clear:hover { color: var(--error); }
+.picker-dropdown {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 2px);
+  left: 0;
+  right: 0;
+  max-height: 260px;
+  overflow-y: auto;
+  background: var(--bg-input-solid);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+}
+.picker-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.4rem 0.6rem;
+  cursor: pointer;
+  font-size: 0.88rem;
+}
+.picker-row:hover, .picker-row:focus { background: #2a3040; outline: none; }
+.picker-row-label { flex: 1; }
+.picker-empty { padding: 0.6rem; color: var(--text-muted); font-size: 0.85rem; }
+.picker-group-header {
+  position: sticky;
+  top: 0;
+  padding: 0.3rem 0.6rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  background: var(--bg-input-solid);
+  border-bottom: 1px solid var(--border);
+}
+
+/* Pal icon / element badges / passive chips */
+.pal-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  overflow: hidden;
+  flex-shrink: 0;
+  background: #2a2f3d;
+}
+.pal-icon img { width: 100%; height: 100%; object-fit: contain; }
+.pal-icon-fallback {
+  color: #fff;
+  font-weight: 700;
+  font-size: 0.7rem;
+  width: 100%; height: 100%;
+  display: flex; align-items: center; justify-content: center;
+}
+
+.element-badges { display: flex; gap: 0.25rem; margin-left: auto; }
+.element-badge {
+  font-size: 0.68rem;
+  color: #0b1220;
+  padding: 0.1rem 0.4rem;
+  border-radius: 4px;
+  font-weight: 600;
+}
+
+.passive-chip {
+  display: inline-block;
+  font-size: 0.78rem;
+  padding: 0.15rem 0.5rem;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  margin-right: 0.25rem;
+  margin-bottom: 0.2rem;
+}
+/* Tiers mirror the in-game rank-based color coding (see the comment on
+   passiveTierClass() in js/ui/shared.js for the source and caveats). */
+.passive-chip.tier-worldtree { border-color: #a374f0; color: #cbb0f5; background: #241c33; }
+.passive-chip.tier-rainbow { border-color: #5cf1e2; color: #8ff5e8; background: #16302c; }
+.passive-chip.tier-gold { border-color: #ffdd00; color: #f2d76b; background: #2e2a12; }
+.passive-chip.tier-neutral { border-color: var(--border); color: var(--text-muted); }
+.passive-chip.tier-negative { border-color: #7a3f3f; color: #d68f8f; background: #2a1c1c; }
+.passive-tag {
+  font-size: 0.65rem;
+  color: var(--warn);
+  border: 1px solid var(--warn);
+  border-radius: 4px;
+  padding: 0 0.3rem;
+  margin-left: auto;
+}
+
+/* Roster list */
+.pal-list { display: flex; flex-direction: column; gap: 0.5rem; }
+.pal-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.5rem;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+.pal-row-info { flex: 1; min-width: 0; }
+.pal-row-name { font-weight: 600; }
+.pal-row-passives { margin-top: 0.25rem; }
+.pal-row-actions { display: flex; gap: 0.3rem; flex-shrink: 0; }
+.empty-state, .muted { color: var(--text-muted); font-size: 0.9rem; }
+
+/* Preflight */
+.preflight-card p { margin: 0.3rem 0; font-size: 0.9rem; }
+.preflight-card .ok { color: var(--ok); }
+.preflight-card .warn { color: var(--warn); }
+.preflight-card .error { color: var(--error); }
+
+/* Results */
+.results-status { margin-bottom: 0.5rem; font-size: 0.92rem; }
+.results-list { display: flex; flex-direction: column; gap: 0.75rem; }
+.result-card { }
+.route-tree-scroll { overflow-x: auto; padding-bottom: 0.25rem; }
+.route-node { padding-left: 0.25rem; }
+.route-node-header { display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap; }
+.route-node-label { font-weight: 600; white-space: nowrap; }
+.route-node-tag { font-size: 0.78rem; color: var(--text-muted); margin: 0.15rem 0 0.4rem; white-space: nowrap; }
+
+/* Depth 0 (the final target's direct parents): side by side, like reading
+   a single breeding pair left-to-right. */
+.route-pair-horizontal {
+  display: flex;
+  align-items: flex-start;
+  gap: 1.5rem;
+}
+.route-pair-horizontal > .route-node { flex: 0 0 auto; min-width: 200px; }
+
+/* Every generation below that: stacked vertically, then an "=" restating
+   the child right after (see .route-equals-row) -- this reads as a clean
+   summary per generation and, unlike a side-by-side layout, never runs out
+   of horizontal room however many generations deep the route goes (it just
+   makes the page taller instead of wider). */
+.route-pair-vertical {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.6rem;
+}
+
+.route-equals {
+  align-self: center;
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  padding: 0.05rem 0.15rem;
+}
+
+.route-collapsible {
+  padding: 0.4rem 0 0.4rem 1rem;
+  border-left: 2px solid var(--border);
+  margin: 0.3rem 0 0 0.5rem;
+}
+.route-equals-row {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-top: 0.3rem;
+}
+.route-compact-node {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.route-toggle {
+  background: none;
+  border: none;
+  color: var(--accent);
+  font-size: 0.78rem;
+  cursor: pointer;
+  padding: 0;
+  margin-bottom: 0.2rem;
+  white-space: nowrap;
+}
+
+.mask-badge {
+  font-size: 0.7rem;
+  padding: 0.1rem 0.4rem;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+}
+.mask-badge.has { border-color: var(--ok); color: var(--ok); }
+.mask-badge.missing { color: var(--text-muted); text-decoration: line-through; }
+.mask-badge.junk { color: var(--text-muted); }
+
+.loading-overlay {
+  position: fixed;
+  inset: 0;
+  background: var(--bg);
+  color: var(--text);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.1rem;
+  z-index: 100;
+  padding: 2rem;
+  text-align: center;
+}
+
+@media (max-width: 600px) {
+  .app-main { padding: 0.75rem; }
+}

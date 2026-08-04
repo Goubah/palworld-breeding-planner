@@ -1,0 +1,352 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Tests - Palworld Breeding Planner</title>
+<style>
+  body { font-family: ui-monospace, Consolas, monospace; background: #111; color: #ddd; padding: 1.5rem; }
+  h1 { color: #fff; }
+  .test-summary { font-size: 1.2rem; margin: 0.5rem 0 1rem; font-weight: bold; }
+  .all-pass { color: #4caf50; }
+  .has-fail { color: #f44336; }
+  ul { list-style: none; padding: 0; margin: 0; }
+  li { padding: 2px 0; }
+  li.pass { color: #8bc34a; }
+  li.fail { color: #ff7043; }
+</style>
+</head>
+<body>
+<h1>Palworld Breeding Planner &mdash; Test Suite</h1>
+<div id="report">Running&hellip;</div>
+<script type="module">
+import { test, runAll, assert, assertEqual, assertClose } from './js/testharness.js';
+import { loadGameData, getPals, getPassives, getMeta, palByName } from './js/data.js';
+import { childOf } from './js/breeding.js';
+import { outcomeDistribution, popcount, choose, inheritCountDistribution, randomAddDistribution } from './js/probability.js';
+import { runSolver, checkPreflight, reachableSpeciesClosure, feasibleGenderAssignments } from './js/solver.js';
+
+const ctx = {};
+
+test('game data loads', async () => {
+  const { pals, passives, meta } = await loadGameData('data/');
+  ctx.pals = pals; ctx.passives = passives; ctx.meta = meta;
+  assert(pals.length > 0, 'expected pals to load');
+  assert(passives.length > 0, 'expected passives to load');
+  assertEqual(meta.speciesCount, pals.length, 'meta.speciesCount should match pals.length');
+});
+
+test('exactly 299 pals loaded', () => {
+  assertEqual(ctx.pals.length, 299);
+});
+
+test('breeding table has no unset entries, except the one known gender-only pair', () => {
+  // Katress + Wixen is the sole pair in the whole dataset with ONLY
+  // gender-specific entries (Katress F + Wixen M -> Katress Ignis; Katress M
+  // + Wixen F -> Wixen Noct) and no gender-agnostic fallback row. A
+  // gender-agnostic (null, null) lookup is therefore expected to be the one
+  // unresolved pair; every other pair must resolve.
+  const katress = palByName('Katress'), wixen = palByName('Wixen');
+  const n = ctx.pals.length;
+  let checked = 0, nullCount = 0;
+  const unresolved = [];
+  for (let i = 0; i < n; i++) {
+    for (let j = i; j < n; j++) {
+      if (childOf(i, null, j, null) === null) { nullCount++; unresolved.push([i, j]); }
+      checked++;
+    }
+  }
+  assertEqual(checked, n * (n + 1) / 2, 'should check every canonical pair exactly once');
+  assertEqual(nullCount, 1, `expected exactly 1 unresolved pair, got ${nullCount}: ${JSON.stringify(unresolved)}`);
+  const [i, j] = unresolved[0];
+  const isKatressWixen = (i === katress.i && j === wixen.i) || (i === wixen.i && j === katress.i);
+  assert(isKatressWixen, `the one unresolved pair should be Katress/Wixen, got species #${i} + #${j}`);
+});
+
+test('self-pairs breed true (Lamball+Lamball, Jetragon+Jetragon)', () => {
+  const lamball = palByName('Lamball');
+  const jetragon = palByName('Jetragon');
+  assert(lamball, 'Lamball must exist in data');
+  assert(jetragon, 'Jetragon must exist in data');
+  assertEqual(childOf(lamball.i, null, lamball.i, null), lamball.i);
+  assertEqual(childOf(jetragon.i, null, jetragon.i, null), jetragon.i);
+});
+
+const fixtures = [
+  ['Relaxaurus', 'Sparkit', 'Relaxaurus Lux'],
+  ['Vanwyrm', 'Foxcicle', 'Vanwyrm Cryst'],
+  ['Mossanda', 'Grizzbolt', 'Mossanda Lux'],
+  ['Frostallion', 'Helzephyr', 'Frostallion Noct'],
+];
+for (const [a, b, expected] of fixtures) {
+  test(`breeding fixture: ${a} + ${b} -> ${expected}`, () => {
+    const pa = palByName(a), pb = palByName(b), pe = palByName(expected);
+    assert(pa, `${a} not found in data`);
+    assert(pb, `${b} not found in data`);
+    assert(pe, `${expected} not found in data`);
+    const childIdx = childOf(pa.i, null, pb.i, null);
+    assertEqual(childIdx, pe.i, `${a}+${b} should give ${expected}, got species #${childIdx}`);
+  });
+}
+
+test('gender-specific override: Katress F + Wixen M -> Katress Ignis', () => {
+  const katress = palByName('Katress');
+  const wixen = palByName('Wixen');
+  const katressIgnis = palByName('Katress Ignis');
+  assert(katress && wixen && katressIgnis, 'Katress/Wixen names must exist in data');
+  assertEqual(childOf(katress.i, 'FEMALE', wixen.i, 'MALE'), katressIgnis.i);
+});
+
+test('gender-specific override: Katress M + Wixen F -> Wixen Noct', () => {
+  const katress = palByName('Katress');
+  const wixen = palByName('Wixen');
+  const wixenNoct = palByName('Wixen Noct');
+  assert(katress && wixen && wixenNoct, 'Katress/Wixen names must exist in data');
+  assertEqual(childOf(katress.i, 'MALE', wixen.i, 'FEMALE'), wixenNoct.i);
+});
+
+test('inheritance rates reproduce published 40/24/12/10 for clean pools size 1-4', () => {
+  const expected = { 1: 0.40, 2: 0.24, 3: 0.12, 4: 0.10 };
+  for (const k of [1, 2, 3, 4]) {
+    const mask = (1 << k) - 1;
+    const outcomes = outcomeDistribution(mask, 0, mask, 0);
+    const full = outcomes.find(o => o.mask === mask && o.junk === 0);
+    assert(full, `no outcome found for full mask, k=${k}`);
+    assertClose(full.p, expected[k], 1e-9, `k=${k}`);
+  }
+});
+
+test('outcome distributions always sum to 1 across all valid signatures', () => {
+  let checked = 0;
+  for (let mask1 = 0; mask1 < 16; mask1++) {
+    for (let junk1 = 0; junk1 <= 4 - popcount(mask1); junk1++) {
+      for (let mask2 = 0; mask2 < 16; mask2++) {
+        for (let junk2 = 0; junk2 <= 4 - popcount(mask2); junk2++) {
+          const outcomes = outcomeDistribution(mask1, junk1, mask2, junk2);
+          const total = outcomes.reduce((s, o) => s + o.p, 0);
+          assertClose(total, 1, 1e-9, `mask1=${mask1},junk1=${junk1},mask2=${mask2},junk2=${junk2}`);
+          checked++;
+        }
+      }
+    }
+  }
+  assert(checked > 100, 'sanity: should have checked many signatures');
+});
+
+test('outcome invariant: popcount(mask)+junk <= 4 for every possible outcome', () => {
+  let checked = 0;
+  for (let mask1 = 0; mask1 < 16; mask1++) {
+    for (let mask2 = 0; mask2 < 16; mask2++) {
+      const outcomes = outcomeDistribution(mask1, 1, mask2, 1);
+      for (const o of outcomes) {
+        assert(popcount(o.mask) + o.junk <= 4, `invariant violated: mask=${o.mask} junk=${o.junk}`);
+        checked++;
+      }
+    }
+  }
+  assert(checked > 0, 'sanity: should have checked outcomes');
+});
+
+test('choose() basic values', () => {
+  assertEqual(choose(4, 0), 1);
+  assertEqual(choose(4, 4), 1);
+  assertEqual(choose(4, 2), 6);
+  assertEqual(choose(5, 2), 10);
+  assertEqual(choose(2, 5), 0);
+  assertEqual(choose(3, -1), 0);
+});
+
+test('inheritCountDistribution sums to 1 and clamps at pool size', () => {
+  for (let n = 0; n <= 6; n++) {
+    const dist = inheritCountDistribution(n);
+    let total = 0;
+    for (const [g, p] of dist) {
+      total += p;
+      assert(g <= Math.max(n, 0), `g=${g} should be <= n=${n}`);
+    }
+    assertClose(total, 1, 1e-9, `n=${n}`);
+  }
+});
+
+test('randomAddDistribution: room=0 is a point mass at 0 (no-room-skips-random rule)', () => {
+  const dist = randomAddDistribution(0);
+  assertEqual(dist.size, 1);
+  assertClose(dist.get(0), 1, 1e-9);
+});
+
+test('30 of 115 standard passives are non-random-inheritable, including Legend and Lucky', () => {
+  const nonRandom = ctx.passives.filter(p => !p.randomAllowed);
+  assertEqual(ctx.passives.length, 115, 'expected 115 standard passives');
+  assertEqual(nonRandom.length, 30, 'expected 30 non-random-inheritable passives');
+  const names = new Set(nonRandom.map(p => p.name));
+  assert(names.has('Legend'), 'Legend should be non-random-inheritable');
+  assert(names.has('Lucky'), 'Lucky should be non-random-inheritable');
+});
+
+test('reachability BFS: Melpaca + Lapiron reach 202/299 species', () => {
+  const melpaca = palByName('Melpaca'), lapiron = palByName('Lapiron');
+  assert(melpaca && lapiron, 'fixture pals must exist');
+  const reached = reachableSpeciesClosure([melpaca.i, lapiron.i], ctx.meta.genderSpecificRules);
+  assertEqual(reached.size, 202, 'ground truth independently verified against data/breeding.bin via Python');
+});
+
+test('reachability BFS: a single Lamball alone only reaches itself', () => {
+  const lamball = palByName('Lamball');
+  assert(lamball, 'Lamball must exist');
+  const reached = reachableSpeciesClosure([lamball.i], ctx.meta.genderSpecificRules);
+  assertEqual(reached.size, 1);
+  assert(reached.has(lamball.i));
+});
+
+test('solver finds a 1-step route when both parents of a known pair are owned', () => {
+  const relaxaurus = palByName('Relaxaurus');
+  const sparkit = palByName('Sparkit');
+  const relaxaurusLux = palByName('Relaxaurus Lux');
+  const legend = ctx.passives.find(p => p.name === 'Legend');
+  assert(relaxaurus && sparkit && relaxaurusLux && legend, 'fixture pals/passive must exist');
+
+  const ownedPals = [
+    { speciesIdx: relaxaurus.i, gender: 'MALE', passiveInternalNames: [legend.internalName] },
+    { speciesIdx: sparkit.i, gender: 'FEMALE', passiveInternalNames: [legend.internalName] },
+  ];
+
+  const result = runSolver({
+    ownedPals,
+    targetSpeciesIdx: relaxaurusLux.i,
+    desiredPassiveNames: [legend.internalName],
+    maleProbOf: (i) => ctx.pals[i].maleProb,
+    genderRules: ctx.meta.genderSpecificRules,
+    maxSteps: 2,
+  });
+
+  assert(result.results.length > 0, 'expected at least one route');
+  const best = result.results[0];
+  assertEqual(best.type, 'bred');
+  assertEqual(best.species, relaxaurusLux.i);
+  assertEqual(best.parentA.type, 'owned');
+  assertEqual(best.parentB.type, 'owned');
+});
+
+test('pre-flight: unreachable target is flagged, not silently searched', () => {
+  const lamball = palByName('Lamball');
+  const jetragon = palByName('Jetragon');
+  assert(lamball && jetragon, 'fixture pals must exist');
+  const pre = checkPreflight({
+    ownedPals: [{ speciesIdx: lamball.i, gender: 'MALE', passiveInternalNames: [] }],
+    targetSpeciesIdx: jetragon.i,
+    desiredPassiveNames: [],
+    passiveInfoByName: (n) => ctx.passives.find(p => p.internalName === n),
+    genderRules: ctx.meta.genderSpecificRules,
+  });
+  assertEqual(pre.speciesReachable, false);
+  assertEqual(pre.blocked, true);
+});
+
+test('pre-flight: a target reachable only BEYOND maxSteps is blocked with the true generation count, not silently "reachable"', () => {
+  // Reptyro is exactly 4 breeding generations from Relaxaurus+Sparkit (confirmed
+  // earlier by direct construction of a real 4-generation route in the UI).
+  const relaxaurus = palByName('Relaxaurus');
+  const sparkit = palByName('Sparkit');
+  const reptyro = palByName('Reptyro');
+  assert(relaxaurus && sparkit && reptyro, 'fixture pals must exist');
+  const ownedPals = [
+    { speciesIdx: relaxaurus.i, gender: 'MALE', passiveInternalNames: [] },
+    { speciesIdx: sparkit.i, gender: 'FEMALE', passiveInternalNames: [] },
+  ];
+
+  const tooFew = checkPreflight({
+    ownedPals, targetSpeciesIdx: reptyro.i, desiredPassiveNames: [],
+    passiveInfoByName: (n) => ctx.passives.find(p => p.internalName === n),
+    genderRules: ctx.meta.genderSpecificRules,
+    maxSteps: 3,
+  });
+  assertEqual(tooFew.speciesReachable, true, 'Reptyro is reachable in principle');
+  assertEqual(tooFew.minGenerations, 4, 'true minimum should be reported even when it exceeds maxSteps');
+  assertEqual(tooFew.reachableWithinSteps, false);
+  assertEqual(tooFew.blocked, true, 'must block rather than let a doomed search run');
+
+  const enough = checkPreflight({
+    ownedPals, targetSpeciesIdx: reptyro.i, desiredPassiveNames: [],
+    passiveInfoByName: (n) => ctx.passives.find(p => p.internalName === n),
+    genderRules: ctx.meta.genderSpecificRules,
+    maxSteps: 4,
+  });
+  assertEqual(enough.reachableWithinSteps, true);
+  assertEqual(enough.blocked, false);
+
+  const noMaxStepsGiven = checkPreflight({
+    ownedPals, targetSpeciesIdx: reptyro.i, desiredPassiveNames: [],
+    passiveInfoByName: (n) => ctx.passives.find(p => p.internalName === n),
+    genderRules: ctx.meta.genderSpecificRules,
+  });
+  assertEqual(noMaxStepsGiven.reachableWithinSteps, true, 'omitting maxSteps should default to unbounded, matching prior behavior');
+});
+
+test('pre-flight: a desired non-random passive (Legend) nobody owns is impossible, not just unlikely', () => {
+  const lamball = palByName('Lamball');
+  const legend = ctx.passives.find(p => p.name === 'Legend');
+  assert(lamball && legend, 'fixture pal/passive must exist');
+  const pre = checkPreflight({
+    ownedPals: [{ speciesIdx: lamball.i, gender: 'MALE', passiveInternalNames: [] }],
+    targetSpeciesIdx: lamball.i,
+    desiredPassiveNames: [legend.internalName],
+    passiveInfoByName: (n) => ctx.passives.find(p => p.internalName === n),
+    genderRules: ctx.meta.genderSpecificRules,
+  });
+  assertEqual(pre.passiveChecks[0].status, 'impossible');
+  assertEqual(pre.blocked, true);
+});
+
+test('special-cased pair: solver reaches Katress Ignis from two fixed-gender owned parents', () => {
+  const katress = palByName('Katress');
+  const wixen = palByName('Wixen');
+  const katressIgnis = palByName('Katress Ignis');
+  const legend = ctx.passives.find(p => p.name === 'Legend');
+  assert(katress && wixen && katressIgnis && legend, 'fixture pals must exist');
+
+  const ownedPals = [
+    { speciesIdx: katress.i, gender: 'FEMALE', passiveInternalNames: [legend.internalName] },
+    { speciesIdx: wixen.i, gender: 'MALE', passiveInternalNames: [legend.internalName] },
+  ];
+  const result = runSolver({
+    ownedPals,
+    targetSpeciesIdx: katressIgnis.i,
+    desiredPassiveNames: [legend.internalName],
+    maleProbOf: (i) => ctx.pals[i].maleProb,
+    genderRules: ctx.meta.genderSpecificRules,
+    maxSteps: 1,
+  });
+  assert(result.results.length > 0, 'expected Katress Ignis to be reachable in 1 step from Katress F + Wixen M');
+});
+
+test('feasibleGenderAssignments: regression for the bug where flexible (ANY) states lost the special-pair rule match', () => {
+  // Caught during development: the generic non-special path queries
+  // childOf(a.species, null, b.species, null), which is correct for every
+  // normal pair but returns null for Katress/Wixen (whose only table rows
+  // are gender-specific). Flexible 'ANY' states must still resolve to
+  // concrete genders here rather than collapsing to null.
+  const fixed = { species: 1, genderTag: 'F' };
+  const flexible = { species: 2, genderTag: 'ANY' };
+
+  const bothFlexible = feasibleGenderAssignments(flexible, { species: 3, genderTag: 'ANY' }, () => 0.5);
+  assertEqual(bothFlexible.length, 2, 'both-flexible should offer both concrete gender orderings');
+  const genders = bothFlexible.map(a => a.aGender + '/' + a.bGender).sort();
+  assertEqual(JSON.stringify(genders), JSON.stringify(['FEMALE/MALE', 'MALE/FEMALE']));
+  for (const a of bothFlexible) assertClose(a.p, 1, 1e-9);
+
+  const oneFixed = feasibleGenderAssignments(fixed, flexible, (speciesIdx) => (speciesIdx === 2 ? 0.7 : 0.5));
+  assertEqual(oneFixed.length, 1);
+  assertEqual(oneFixed[0].aGender, 'FEMALE');
+  assertEqual(oneFixed[0].bGender, 'MALE');
+  assertClose(oneFixed[0].p, 0.7, 1e-9, 'flexible side must supply MALE at its species male-probability');
+
+  const sameGenderFixed = feasibleGenderAssignments({ species: 1, genderTag: 'M' }, { species: 2, genderTag: 'M' }, () => 0.5);
+  assertEqual(sameGenderFixed.length, 0, 'two fixed males can never be paired');
+});
+
+const reportEl = document.getElementById('report');
+runAll(reportEl).then(({ pass, fail }) => {
+  document.title = `${fail === 0 ? 'PASS' : 'FAIL'} (${pass}/${pass + fail}) - Tests`;
+});
+</script>
+</body>
+</html>

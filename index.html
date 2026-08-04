@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Palworld Breeding Route Planner</title>
+<link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+<div id="loading-overlay" class="loading-overlay">Loading game data&hellip;</div>
+
+<header class="app-header">
+  <h1>Palworld Breeding Route Planner</h1>
+</header>
+
+<main class="app-main">
+  <section id="section-roster" class="page-section">
+    <h2>My Pals</h2>
+    <div id="roster-mount"></div>
+  </section>
+
+  <section id="section-target" class="page-section">
+    <h2>Target Pal Child</h2>
+    <div id="target-mount"></div>
+    <div id="results-mount"></div>
+  </section>
+
+  <details class="page-section settings-details">
+    <summary>Advanced Settings</summary>
+    <div id="settings-mount"></div>
+  </details>
+</main>
+
+<footer class="app-footer">
+  <p>Heuristic beam search over a game-derived breeding table &mdash; results are good routes, not proven-optimal ones. Everything runs locally in your browser; nothing is uploaded anywhere.</p>
+</footer>
+
+<script type="module" src="js/app.js"></script>
+</body>
+</html>

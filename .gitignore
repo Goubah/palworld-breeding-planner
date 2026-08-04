@@ -1,0 +1,10 @@
+# Dev-time scrape cache from tools/build_data.py -- large (~11MB) and easily
+# regenerated (py tools/build_data.py), not needed to serve the live site.
+tools/cache/
+
+# Local test-server logs from development.
+tools/*.txt
+
+# OS junk
+.DS_Store
+Thumbs.db

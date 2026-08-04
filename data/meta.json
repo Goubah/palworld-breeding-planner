@@ -1,0 +1,33 @@
+{
+ "speciesCount": 299,
+ "passiveInheritanceWeights": {
+  "1": 4,
+  "2": 3,
+  "3": 2,
+  "4": 1
+ },
+ "passiveRandomWeights": {
+  "0": 4,
+  "1": 3,
+  "2": 2,
+  "3": 1
+ },
+ "genderSpecificRules": [
+  {
+   "p1": 133,
+   "g1": "FEMALE",
+   "p2": 93,
+   "g2": "MALE",
+   "child": 134
+  },
+  {
+   "p1": 133,
+   "g1": "MALE",
+   "p2": 93,
+   "g2": "FEMALE",
+   "child": 94
+  }
+ ],
+ "sourceVersion": "v27",
+ "generatedAt": "2026-08-03T22:47:16Z"
+}
