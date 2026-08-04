@@ -127,6 +127,7 @@ body {
   cursor: pointer;
 }
 .gender-btn.active { color: var(--text); border-color: var(--accent); background: #2a3548; }
+.gender-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 .gender-icon.male { color: #6fa8dc; }
 .gender-icon.female { color: #e08fc0; }
 

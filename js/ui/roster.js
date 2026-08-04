@@ -34,10 +34,28 @@ export function initRosterTab(container) {
   maleBtn.type = 'button'; maleBtn.textContent = 'Male'; maleBtn.className = 'gender-btn active';
   const femaleBtn = document.createElement('button');
   femaleBtn.type = 'button'; femaleBtn.textContent = 'Female'; femaleBtn.className = 'gender-btn';
-  maleBtn.addEventListener('click', () => { gender = 'MALE'; maleBtn.classList.add('active'); femaleBtn.classList.remove('active'); });
-  femaleBtn.addEventListener('click', () => { gender = 'FEMALE'; femaleBtn.classList.add('active'); maleBtn.classList.remove('active'); });
+  // "Both" isn't a real gender value anywhere in the data model -- it's a
+  // shortcut that adds two roster entries (one MALE, one FEMALE, identical
+  // species/passives) from a single click, for the common case of owning
+  // both sexes of a Pal with the same passive loadout. Only meaningful when
+  // adding; disabled while editing a specific existing entry (see the Edit
+  // button handler below), since an edit always targets exactly one entry.
+  const bothBtn = document.createElement('button');
+  bothBtn.type = 'button'; bothBtn.textContent = 'Both'; bothBtn.className = 'gender-btn';
+  bothBtn.title = 'Adds one Male and one Female entry with the same species and passives';
+
+  const genderButtons = { MALE: maleBtn, FEMALE: femaleBtn, BOTH: bothBtn };
+  function setGenderUI(value) {
+    gender = value;
+    for (const key of Object.keys(genderButtons)) genderButtons[key].classList.toggle('active', key === value);
+  }
+  maleBtn.addEventListener('click', () => setGenderUI('MALE'));
+  femaleBtn.addEventListener('click', () => setGenderUI('FEMALE'));
+  bothBtn.addEventListener('click', () => setGenderUI('BOTH'));
+
   genderToggle.appendChild(maleBtn);
   genderToggle.appendChild(femaleBtn);
+  genderToggle.appendChild(bothBtn);
   genderRow.appendChild(genderLabel);
   genderRow.appendChild(genderToggle);
   formSection.appendChild(genderRow);
@@ -77,14 +95,24 @@ export function initRosterTab(container) {
   cancelEditBtn.textContent = 'Cancel Edit';
   cancelEditBtn.hidden = true;
 
+  function clearPassives() {
+    for (const p of passivePickers) p.clear();
+  }
+
+  function resetSpeciesAndGender() {
+    speciesPicker.clear();
+    setGenderUI('MALE');
+  }
+
+  // Full reset: used when leaving edit mode (save or cancel), where there's
+  // no "adding several similar Pals in a row" workflow to preserve state for.
   function resetForm() {
     editingId = null;
-    speciesPicker.clear();
-    gender = 'MALE';
-    maleBtn.classList.add('active'); femaleBtn.classList.remove('active');
-    for (const p of passivePickers) p.clear();
+    resetSpeciesAndGender();
+    clearPassives();
     submitBtn.textContent = 'Add to Roster';
     cancelEditBtn.hidden = true;
+    bothBtn.disabled = false;
     formTitle.textContent = 'Add a Pal';
   }
 
@@ -92,10 +120,26 @@ export function initRosterTab(container) {
     const species = speciesPicker.getValue();
     if (!species) { alert('Pick a Pal first.'); return; }
     const passiveNames = passivePickers.map(p => p.getValue()).filter(Boolean).map(p => p.internalName);
-    const palData = { speciesInternal: species.internalName, gender, passiveInternalNames: passiveNames };
-    if (editingId) store.updatePal(editingId, palData);
-    else store.addPal(palData);
-    resetForm();
+
+    if (editingId) {
+      // "Both" isn't offered while editing (button is disabled), but guard
+      // anyway rather than silently writing an invalid gender if that ever changes.
+      const safeGender = gender === 'BOTH' ? 'MALE' : gender;
+      store.updatePal(editingId, { speciesInternal: species.internalName, gender: safeGender, passiveInternalNames: passiveNames });
+      resetForm();
+    } else {
+      if (gender === 'BOTH') {
+        store.addPal({ speciesInternal: species.internalName, gender: 'MALE', passiveInternalNames: passiveNames });
+        store.addPal({ speciesInternal: species.internalName, gender: 'FEMALE', passiveInternalNames: passiveNames });
+      } else {
+        store.addPal({ speciesInternal: species.internalName, gender, passiveInternalNames: passiveNames });
+      }
+      // Passives deliberately stay selected -- adding several different
+      // Pals that share a passive loadout is common, so only the
+      // species/gender (which almost certainly change for the next Pal)
+      // reset here. "Clear Passives" below resets them explicitly.
+      resetSpeciesAndGender();
+    }
     renderList();
   });
   cancelEditBtn.addEventListener('click', resetForm);
@@ -105,6 +149,16 @@ export function initRosterTab(container) {
   btnRow.appendChild(submitBtn);
   btnRow.appendChild(cancelEditBtn);
   formSection.appendChild(btnRow);
+
+  const clearPassivesBtn = document.createElement('button');
+  clearPassivesBtn.type = 'button';
+  clearPassivesBtn.className = 'btn btn-secondary';
+  clearPassivesBtn.textContent = 'Clear Passives';
+  clearPassivesBtn.addEventListener('click', clearPassives);
+  const clearRow = document.createElement('div');
+  clearRow.className = 'form-row';
+  clearRow.appendChild(clearPassivesBtn);
+  formSection.appendChild(clearRow);
 
   container.appendChild(formSection);
 
@@ -254,9 +308,8 @@ export function initRosterTab(container) {
       editBtn.addEventListener('click', () => {
         editingId = pal.id;
         speciesPicker.setValue(species);
-        gender = pal.gender;
-        if (gender === 'MALE') { maleBtn.classList.add('active'); femaleBtn.classList.remove('active'); }
-        else { femaleBtn.classList.add('active'); maleBtn.classList.remove('active'); }
+        setGenderUI(pal.gender); // always MALE or FEMALE here -- store never persists 'BOTH'
+        bothBtn.disabled = true; // an edit always targets exactly one existing entry
         palPassiveNames.forEach((pname, i) => {
           const passive = getPassives().find(p => p.internalName === pname);
           if (passivePickers[i] && passive) passivePickers[i].setValue(passive);
