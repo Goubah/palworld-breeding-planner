@@ -2,13 +2,18 @@
 <!--
   Submit this directly in Google Search Console (Sitemaps > enter "sitemap.xml").
 
-  It is NOT referenced from a robots.txt: robots.txt is only read at a domain's
-  root (https://goubah.github.io/robots.txt), which this project doesn't
-  control -- that would need a separate repo named "goubah.github.io". Nothing
-  is lost by that, since no robots.txt at all means nothing is disallowed.
+  It is NOT referenced from a robots.txt. Crawlers only read robots.txt at a
+  domain's root (https://goubah.github.io/robots.txt), which this project
+  cannot serve; that would need a separate repo named "goubah.github.io".
+  Nothing is lost by that, since having no robots.txt at all means nothing is
+  disallowed.
 
-  Single-page app, so there is exactly one URL. Update <lastmod> when the page
-  itself meaningfully changes; it is a hint, not a ranking factor.
+  Single-page app, so there is exactly one URL. Update the lastmod date when
+  the page itself meaningfully changes; it is a hint, not a ranking factor.
+
+  Note for future edits: XML comments cannot contain a double hyphen, so keep
+  prose in here free of them. An earlier version of this file used one as a
+  dash and was silently invalid XML.
 -->
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url>
