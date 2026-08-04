@@ -297,7 +297,14 @@ body {
 }
 
 /* Roster list */
-.pal-list { display: flex; flex-direction: column; gap: 0.5rem; }
+.pal-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  max-height: 34rem; /* roughly 10 rows before scrolling */
+  overflow-y: auto;
+  padding-right: 0.25rem;
+}
 .pal-row {
   display: flex;
   align-items: center;
