@@ -5,7 +5,7 @@
 
 import { getPals, getMeta, palByInternal } from '../data.js';
 import * as store from '../store.js';
-import { renderPalIcon } from './shared.js';
+import { renderPalIcon, attachTooltip } from './shared.js';
 
 let worker = null;
 let statusEl, cancelBtn, listEl;
@@ -210,12 +210,14 @@ function renderNodeHeader(node, desiredPassives) {
     const badge = document.createElement('span');
     badge.className = 'mask-badge ' + (has ? 'has' : 'missing');
     badge.textContent = desiredPassives[b].name;
+    attachTooltip(badge, desiredPassives[b].description);
     header.appendChild(badge);
   }
   if (node.junk > 0) {
     const junkBadge = document.createElement('span');
     junkBadge.className = 'mask-badge junk';
     junkBadge.textContent = `+${node.junk} other`;
+    attachTooltip(junkBadge, 'Other passives this Pal carries that aren\'t part of your desired set (specific ones aren\'t tracked, just the count).');
     header.appendChild(junkBadge);
   }
   return header;

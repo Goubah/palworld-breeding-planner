@@ -8,6 +8,57 @@
 import { getPals, getPassives } from '../data.js';
 import { createSearchPicker } from './picker.js';
 
+// A single shared custom tooltip, used instead of the native `title`
+// attribute -- the browser's own title tooltip has a fixed ~1-2s show delay
+// that CSS/JS can't shorten, which reads as sluggish for something meant to
+// give a quick at-a-glance passive description. This shows in ~120ms and is
+// styled to match the app's dark theme instead of the OS default tooltip box.
+let _tooltipEl = null;
+let _tooltipShowTimer = null;
+
+function ensureTooltipEl() {
+  if (_tooltipEl) return _tooltipEl;
+  _tooltipEl = document.createElement('div');
+  _tooltipEl.className = 'app-tooltip';
+  _tooltipEl.hidden = true;
+  document.body.appendChild(_tooltipEl);
+  return _tooltipEl;
+}
+
+function positionTooltip(anchorRect) {
+  const tip = ensureTooltipEl();
+  const tipRect = tip.getBoundingClientRect();
+  let left = anchorRect.left;
+  let top = anchorRect.bottom + 6;
+  if (left + tipRect.width > window.innerWidth - 8) left = window.innerWidth - tipRect.width - 8;
+  if (top + tipRect.height > window.innerHeight - 8) top = anchorRect.top - tipRect.height - 6;
+  tip.style.left = Math.max(8, left) + 'px';
+  tip.style.top = Math.max(8, top) + 'px';
+}
+
+function showTooltip(anchorEl, text) {
+  const tip = ensureTooltipEl();
+  tip.textContent = text;
+  tip.hidden = false;
+  positionTooltip(anchorEl.getBoundingClientRect());
+}
+
+function hideTooltip() {
+  clearTimeout(_tooltipShowTimer);
+  if (_tooltipEl) _tooltipEl.hidden = true;
+}
+
+/** Wires up a fast custom hover tooltip on `el`. No-op if `text` is falsy. */
+export function attachTooltip(el, text) {
+  if (!text) return;
+  el.addEventListener('mouseenter', () => {
+    clearTimeout(_tooltipShowTimer);
+    _tooltipShowTimer = setTimeout(() => showTooltip(el, text), 120);
+  });
+  el.addEventListener('mouseleave', hideTooltip);
+  el.addEventListener('mousedown', hideTooltip);
+}
+
 // Keys must match data/pals.json's actual element strings exactly (verified
 // against the full dataset: Normal, Fire, Water, Leaf, Electricity, Ice,
 // Earth, Dark, Dragon -- 9 distinct values, no others exist).
@@ -101,7 +152,7 @@ export function renderPassiveChip(passive) {
   const chip = document.createElement('span');
   chip.className = 'passive-chip ' + passiveTierClass(passive.rank);
   chip.textContent = passive.name;
-  if (passive.description) chip.title = passive.description;
+  attachTooltip(chip, passive.description);
   return chip;
 }
 
@@ -144,7 +195,7 @@ export function createPassivePicker(onChange, { isExcluded } = {}) {
         const tag = document.createElement('span');
         tag.className = 'passive-tag';
         tag.textContent = 'parent-only';
-        tag.title = 'Can never be randomly rolled -- must come from a parent';
+        attachTooltip(tag, 'Can never be randomly rolled -- must come from a parent');
         row.appendChild(tag);
       }
     },

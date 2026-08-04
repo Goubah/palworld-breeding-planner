@@ -184,6 +184,28 @@ body {
   line-height: 1;
 }
 .picker-clear:hover { color: var(--error); }
+
+/* Custom fast hover tooltip -- see attachTooltip() in js/ui/shared.js for
+   why this replaces the native `title` attribute (that has a fixed ~1-2s
+   show delay browsers don't let you shorten). Single shared element,
+   repositioned per-anchor; pointer-events:none so it can never itself
+   intercept hover/click and interfere with the element it's describing. */
+.app-tooltip {
+  position: fixed;
+  z-index: 1000;
+  max-width: 260px;
+  background: #11141b;
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-size: 0.78rem;
+  line-height: 1.45;
+  padding: 0.5rem 0.65rem;
+  border-radius: 6px;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.5);
+  white-space: pre-line;
+  pointer-events: none;
+}
+
 .picker-dropdown {
   position: absolute;
   z-index: 20;
