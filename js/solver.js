@@ -326,6 +326,16 @@ export function runSolver({
       const a = allStates.get(keyA), b = allStates.get(keyB);
       if (!a || !b) return;
 
+      // keyA === keyB means "breed this state with itself" -- fine for a
+      // bred/'ANY' state (re-hatching is unlimited by assumption), but for an
+      // OWNED state it's only real if there are 2+ actual individuals in
+      // that bucket. Without this guard, the reversalSide logic below reads
+      // a single owned Pal as its own same-gender opposite and "reverses"
+      // it against itself, offering a route that needs just one physical
+      // Pal to fill both breeding slots -- not possible even with a Pal
+      // Reverser, which only flips a gender, not a Pal into a duplicate.
+      if (keyA === keyB && a.origin === 'owned' && a.ownedRefs.length < 2) return;
+
       if (!specialPairs.has(specialPairKey(a.species, b.species))) {
         // The overwhelming majority of pairs: child species doesn't depend
         // on gender, so a gender-agnostic lookup is always valid, and

@@ -388,6 +388,30 @@ test('gender reversal: two owned same-gender Pals can still be bred, flagged in 
   assertEqual(reversedCount, 1, 'exactly one parent should be flagged as needing a Pal Reverser');
 });
 
+test('gender reversal guard: a single owned Pal cannot be bred with itself', () => {
+  // Caught during development: allowing same-gender pairs via Pal Reverser
+  // also let the solver pair a state key with itself even when only ONE
+  // physical Pal backs that key -- i.e. "breed this exact Pal with itself",
+  // which isn't possible even with a Reverser (that flips a gender, it
+  // doesn't duplicate the Pal). Pick a passive that can only ever appear via
+  // random inheritance, so the only way this test could find a route is by
+  // (incorrectly) breeding the lone owned Lamball with itself.
+  const lamball = palByName('Lamball');
+  const randomPassive = ctx.passives.find(p => p.randomAllowed && p.name !== 'Legend' && p.name !== 'Lucky');
+  assert(lamball && randomPassive, 'fixture pal/passive must exist');
+
+  const result = runSolver({
+    ownedPals: [{ speciesIdx: lamball.i, gender: 'MALE', passiveInternalNames: [] }],
+    targetSpeciesIdx: lamball.i,
+    desiredPassiveNames: [randomPassive.internalName],
+    maleProbOf: (i) => ctx.pals[i].maleProb,
+    genderRules: ctx.meta.genderSpecificRules,
+    maxSteps: 3,
+  });
+
+  assertEqual(result.results.length, 0, 'a lone owned Pal has no partner to breed with, even with a Pal Reverser -- no route should be found');
+});
+
 const reportEl = document.getElementById('report');
 runAll(reportEl).then(({ pass, fail }) => {
   document.title = `${fail === 0 ? 'PASS' : 'FAIL'} (${pass}/${pass + fail}) - Tests`;
