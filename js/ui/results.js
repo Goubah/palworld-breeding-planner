@@ -5,7 +5,7 @@
 
 import { getPals, getMeta, palByInternal } from '../data.js';
 import * as store from '../store.js';
-import { renderPalIcon, attachTooltip, passiveTierClass } from './shared.js';
+import { renderPalIcon, attachTooltip, passiveTierClass, plural } from './shared.js';
 
 let worker = null;
 let statusEl, cancelBtn, listEl;
@@ -104,8 +104,8 @@ function formatEffort(minutes) {
 function renderResults(result, request) {
   listEl.innerHTML = '';
   statusEl.textContent = result.results.length > 0
-    ? `Found ${result.results.length} route(s) after searching ${result.rounds} generation(s) and ${result.stateCount.toLocaleString()} candidate Pals.`
-    : `No route found within the configured search limits (${result.rounds} generation(s), ${result.stateCount.toLocaleString()} candidates explored). Try raising "Beam width" in Settings -- start around 2000-3000 rather than jumping straight to the max, since search time grows much faster than the width does. Raising "Max breeding generations" can help too if the target just needs more steps.`;
+    ? `Found ${plural(result.results.length, 'route')} after searching ${plural(result.rounds, 'generation')} and ${plural(result.stateCount, 'candidate Pal')}.`
+    : `No route found within the current search limits (${plural(result.rounds, 'generation')}, ${plural(result.stateCount, 'candidate Pal')} explored). Try raising "Beam width" in Advanced Settings — 2000–3000 first, since search time grows much faster than the width does. Raising "Max breeding generations" can help too.`;
 
   result.results.forEach((route, idx) => {
     const card = document.createElement('div');
@@ -146,7 +146,7 @@ function renderRouteNode(node, desiredPassives, depth = 0) {
     if (node.needsReversal) {
       const note = document.createElement('span');
       note.className = 'reverser-note';
-      note.textContent = ' -- needs Pal Reverser to flip gender for this pairing';
+      note.textContent = ' — needs Pal Reverser to flip gender for this pairing';
       tag.appendChild(note);
     }
     wrap.appendChild(tag);
@@ -244,6 +244,11 @@ function renderReverserBadge() {
   const badge = document.createElement('span');
   badge.className = 'reverser-badge';
   badge.textContent = '⇄';
+  // Purely visual: the same information is stated in words in the node's
+  // "From your roster ... needs Pal Reverser" tag right below, which is what
+  // screen readers (and touch users, who get no hover tooltip) should get
+  // instead of a bare arrow glyph.
+  badge.setAttribute('aria-hidden', 'true');
   attachTooltip(badge, 'Needs a Pal Reverser: this Pal must have its gender flipped before it can be paired this way.');
   return badge;
 }

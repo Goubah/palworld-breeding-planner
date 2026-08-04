@@ -3,7 +3,7 @@
 
 import { getPassives, palByInternal } from '../data.js';
 import * as store from '../store.js';
-import { createSpeciesPicker, createPassivePicker, renderPalIcon, renderPassiveChip } from './shared.js';
+import { createSpeciesPicker, createPassivePicker, renderPalIcon, renderPassiveChip, plural } from './shared.js';
 
 export function initRosterTab(container) {
   container.innerHTML = '';
@@ -221,7 +221,7 @@ export function initRosterTab(container) {
       cleanedRoster.push({ speciesInternal: raw.speciesInternal, gender, passiveInternalNames: deduped });
     }
 
-    let summary = `Import ${cleanedRoster.length} Pal(s)`;
+    let summary = `Import ${plural(cleanedRoster.length, 'Pal')}`;
     if (skippedUnknownSpecies > 0) summary += `, skipping ${skippedUnknownSpecies} with an unrecognized species`;
     if (trimmedPassives > 0) summary += ` (${trimmedPassives} had unknown and/or duplicate passives removed)`;
     summary += '. This replaces your current roster and settings. Continue?';

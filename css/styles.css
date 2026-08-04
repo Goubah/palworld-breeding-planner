@@ -138,6 +138,14 @@ body {
 }
 @media (max-width: 480px) {
   .passives-grid { grid-template-columns: 1fr; }
+
+  /* The Edit/Duplicate/Delete buttons don't shrink, so on a narrow screen
+     they took most of the row and squeezed the Pal's name and passive chips
+     into a ~130px column that wrapped over several lines (a 127px-tall row
+     for one Pal). Letting the row wrap puts the buttons on their own line
+     and gives the actual content the full width. */
+  .pal-row { flex-wrap: wrap; }
+  .pal-row-actions { flex-basis: 100%; }
 }
 
 .btn {
@@ -301,9 +309,15 @@ body {
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
-  max-height: 34rem; /* roughly 10 rows before scrolling */
+  /* Caps the list at roughly 8 rows on a typical laptop, and never at more
+     than 55% of the viewport however short the screen is. The vh half of
+     that matters: at a flat 34rem the list took ~67% of a phone viewport,
+     leaving so little page around it that scrolling the page itself meant
+     hunting for a gap outside the list to swipe on. */
+  max-height: min(34rem, 55vh);
   overflow-y: auto;
   padding-right: 0.25rem;
+  overscroll-behavior: contain;
 }
 .pal-row {
   display: flex;

@@ -7,7 +7,7 @@
 import { getMeta, palByInternal, passiveByInternal } from '../data.js';
 import { checkPreflight } from '../solver.js';
 import * as store from '../store.js';
-import { createSpeciesPicker, createPassivePicker } from './shared.js';
+import { createSpeciesPicker, createPassivePicker, plural } from './shared.js';
 
 export function initTargetTab(container, { onRun }) {
   container.innerHTML = '';
@@ -108,13 +108,13 @@ export function initTargetTab(container, { onRun }) {
       reachEl.textContent = `✗ ${targetSpecies.name} is NOT reachable by breeding from any Pal you currently own.`;
     } else if (!pre.reachableWithinSteps) {
       reachEl.className = 'error';
-      reachEl.textContent = `✗ ${targetSpecies.name} needs at least ${pre.minGenerations} breeding generations, but "Max breeding generations" is currently set to ${pre.maxSteps}. Raise it in Advanced Settings, then try again.`;
+      reachEl.textContent = `✗ ${targetSpecies.name} needs at least ${plural(pre.minGenerations, 'breeding generation')}, but "Max breeding generations" is currently set to ${pre.maxSteps}. Raise it in Advanced Settings, then try again.`;
     } else if (pre.minGenerations === 0) {
       reachEl.className = 'warn';
-      reachEl.textContent = `⚠ ${targetSpecies.name} has 0 generations from your current roster -- you already own this species directly, so this diagnostic alone doesn't mean much here. If the Pal(s) you own are missing some of the desired passives, click "Find Breeding Routes" below anyway -- it can still breed a fresh ${targetSpecies.name} (using your owned one(s) as a starting point) to combine the passives you're missing.`;
+      reachEl.textContent = `⚠ You already own ${targetSpecies.name}, so no breeding is needed for the species itself. If yours is missing some of the desired passives, run the search anyway — it can breed a fresh ${targetSpecies.name} that combines them.`;
     } else {
       reachEl.className = 'ok';
-      reachEl.textContent = `✓ ${targetSpecies.name} is reachable in ${pre.minGenerations} generation${pre.minGenerations === 1 ? '' : 's'} from your current roster.`;
+      reachEl.textContent = `✓ ${targetSpecies.name} is reachable in ${plural(pre.minGenerations, 'generation')} from your current roster.`;
     }
     preflightCard.appendChild(reachEl);
 
@@ -128,7 +128,7 @@ export function initTargetTab(container, { onRun }) {
         p.textContent = `⚠ ${check.name}: nobody owns it, but it can still appear via random inheritance (unlikely).`;
       } else {
         p.className = 'error';
-        p.textContent = `✗ ${check.name}: nobody owns it, and it can NEVER be randomly rolled -- it must come from a parent.`;
+        p.textContent = `✗ ${check.name}: nobody owns it, and it can never be randomly rolled — it must come from a parent.`;
       }
       preflightCard.appendChild(p);
     }
@@ -136,7 +136,7 @@ export function initTargetTab(container, { onRun }) {
     if (desiredPassives.length === 0) {
       const p = document.createElement('p');
       p.className = 'muted';
-      p.textContent = 'No desired passives selected -- the search will just look for the Pal.';
+      p.textContent = 'No desired passives selected — the search will just look for the Pal.';
       preflightCard.appendChild(p);
     }
 

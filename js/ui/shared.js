@@ -48,6 +48,15 @@ function hideTooltip() {
   if (_tooltipEl) _tooltipEl.hidden = true;
 }
 
+/**
+ * "1 route" / "2 routes". Used instead of writing "route(s)" -- the counts
+ * here are almost always concrete (a route count, a generation depth), so
+ * there's no reason to make the reader do the agreement themselves.
+ */
+export function plural(n, singular, pluralForm = singular + 's') {
+  return `${n.toLocaleString()} ${n === 1 ? singular : pluralForm}`;
+}
+
 /** Wires up a fast custom hover tooltip on `el`. No-op if `text` is falsy. */
 export function attachTooltip(el, text) {
   if (!text) return;
@@ -195,7 +204,7 @@ export function createPassivePicker(onChange, { isExcluded } = {}) {
         const tag = document.createElement('span');
         tag.className = 'passive-tag';
         tag.textContent = 'parent-only';
-        attachTooltip(tag, 'Can never be randomly rolled -- must come from a parent');
+        attachTooltip(tag, 'Can never be randomly rolled — must come from a parent.');
         row.appendChild(tag);
       }
     },
