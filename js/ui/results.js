@@ -143,6 +143,12 @@ function renderRouteNode(node, desiredPassives, depth = 0) {
     const tag = document.createElement('div');
     tag.className = 'route-node-tag';
     tag.textContent = 'From your roster' + (node.genderTag === 'M' ? ' (♂)' : node.genderTag === 'F' ? ' (♀)' : '');
+    if (node.needsReversal) {
+      const note = document.createElement('span');
+      note.className = 'reverser-note';
+      note.textContent = ' -- needs Pal Reverser to flip gender for this pairing';
+      tag.appendChild(note);
+    }
     wrap.appendChild(tag);
     return wrap;
   }
@@ -199,6 +205,7 @@ function renderNodeHeader(node, desiredPassives) {
   const species = getPals()[node.species];
   const header = document.createElement('div');
   header.className = 'route-node-header';
+  if (node.needsReversal) header.appendChild(renderReverserBadge());
   header.appendChild(renderPalIcon(species, 28));
   const label = document.createElement('span');
   label.className = 'route-node-label';
@@ -221,6 +228,20 @@ function renderNodeHeader(node, desiredPassives) {
     header.appendChild(junkBadge);
   }
   return header;
+}
+
+/**
+ * Small badge shown to the left of an owned Pal's icon when this specific
+ * pairing only works by using a Pal Reverser (the in-game item that flips a
+ * Pal's gender) on it -- e.g. you own two males of a species and need to
+ * flip one to female to breed them together.
+ */
+function renderReverserBadge() {
+  const badge = document.createElement('span');
+  badge.className = 'reverser-badge';
+  badge.textContent = '⇄';
+  attachTooltip(badge, 'Needs a Pal Reverser: this Pal must have its gender flipped before it can be paired this way.');
+  return badge;
 }
 
 /** Compact icon+name summary used to restate a node's result after its "=". */

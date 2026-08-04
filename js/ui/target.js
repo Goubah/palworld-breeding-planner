@@ -109,6 +109,9 @@ export function initTargetTab(container, { onRun }) {
     } else if (!pre.reachableWithinSteps) {
       reachEl.className = 'error';
       reachEl.textContent = `✗ ${targetSpecies.name} needs at least ${pre.minGenerations} breeding generations, but "Max breeding generations" is currently set to ${pre.maxSteps}. Raise it in Advanced Settings, then try again.`;
+    } else if (pre.minGenerations === 0) {
+      reachEl.className = 'error';
+      reachEl.textContent = `✗ ${targetSpecies.name} has 0 generations from your current roster -- you already own this species directly, so breeding won't get you a new one. Any route below is only for adding missing passives to a fresh one.`;
     } else {
       reachEl.className = 'ok';
       reachEl.textContent = `✓ ${targetSpecies.name} is reachable in ${pre.minGenerations} generation${pre.minGenerations === 1 ? '' : 's'} from your current roster.`;

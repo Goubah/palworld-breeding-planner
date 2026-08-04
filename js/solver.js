@@ -10,15 +10,17 @@
 // Gender model: an owned Pal has a fixed, known gender ('M'/'F'). A bred
 // intermediate is tagged 'ANY' -- you can obtain either gender of it by
 // re-hatching its parent pair, at a cost baked into that species' male/
-// female ratio. Two fixed-gender states of the SAME gender can never be
-// bred together (Palworld requires one male + one female); two flexible
-// ('ANY') states are treated as freely gender-compatible (a documented
-// simplification -- hatching a couple of extra eggs of each side to line up
-// genders is cheap relative to matching passives, so it isn't modeled as a
-// throttling cost). This keeps the meaningful constraint -- an owned
-// same-gender pair, or a skewed-gender bred species paired against a fixed
-// owned gender -- without recursively modeling multi-hatch gender matching
-// for the fully-flexible case.
+// female ratio. Two fixed-gender states of the SAME gender can still be
+// bred together (Palworld requires one male + one female per pair, but the
+// Pal Reverser item lets you flip one owned Pal's gender on demand) -- see
+// pairGenderInfo's `reversalSide`, surfaced in the UI so the player knows
+// the route needs that item. Two flexible ('ANY') states are treated as
+// freely gender-compatible (a documented simplification -- hatching a
+// couple of extra eggs of each side to line up genders is cheap relative to
+// matching passives, so it isn't modeled as a throttling cost). This keeps
+// the meaningful constraint -- a skewed-gender bred species paired against
+// a fixed owned gender -- without recursively modeling multi-hatch gender
+// matching for the fully-flexible case.
 
 import { childOf } from './breeding.js';
 import { cachedOutcomeDistribution } from './probability.js';
@@ -169,17 +171,34 @@ export function checkPreflight({ ownedPals, targetSpeciesIdx, desiredPassiveName
   };
 }
 
-function pairGenderProbability(a, b, maleProbOf) {
+/**
+ * Like the old pairGenderProbability, but also reports whether the pairing
+ * only works by using a Pal Reverser (the in-game item that flips a Pal's
+ * gender) on one of the two OWNED, fixed-gender sides. Two fixed-gender Pals
+ * of the same gender used to be a hard dead end (probability 0); Palworld
+ * actually lets you reverse one of them on demand, so that pairing is fully
+ * usable -- just worth flagging to the player, since it costs an item they
+ * need to have or make. `reversalSide` is 'A'/'B' (whichever side needs the
+ * item) or null when no reversal is involved.
+ */
+function pairGenderInfo(a, b, maleProbOf) {
   const aFixed = a.genderTag === 'M' || a.genderTag === 'F';
   const bFixed = b.genderTag === 'M' || b.genderTag === 'F';
-  if (aFixed && bFixed) return a.genderTag === b.genderTag ? 0 : 1;
+  if (aFixed && bFixed) {
+    if (a.genderTag !== b.genderTag) return { p: 1, reversalSide: null };
+    return { p: 1, reversalSide: 'B' };
+  }
   if (aFixed && !bFixed) {
     const needed = a.genderTag === 'M' ? 'F' : 'M';
     const mp = maleProbOf(b.species);
-    return needed === 'M' ? mp : (1 - mp);
+    return { p: needed === 'M' ? mp : (1 - mp), reversalSide: null };
   }
-  if (!aFixed && bFixed) return pairGenderProbability(b, a, maleProbOf);
-  return 1; // both flexible -- see gender model note above
+  if (!aFixed && bFixed) {
+    const needed = b.genderTag === 'M' ? 'F' : 'M';
+    const mp = maleProbOf(a.species);
+    return { p: needed === 'M' ? mp : (1 - mp), reversalSide: null };
+  }
+  return { p: 1, reversalSide: null }; // both flexible -- see gender model note above
 }
 
 function genderTagToGender(tag) {
@@ -195,7 +214,7 @@ function specialPairKey(i, j) {
  * with its probability, WITHOUT collapsing flexible ('ANY') sides to null.
  * Only used for the rare species pair whose child depends on which parent is
  * male vs female -- every other pair is handled via the gender-agnostic
- * childOf() lookup plus pairGenderProbability().
+ * childOf() lookup plus pairGenderInfo().
  */
 function feasibleGenderAssignments(a, b, maleProbOf) {
   const aFixed = a.genderTag === 'M' || a.genderTag === 'F';
@@ -279,7 +298,7 @@ export function runSolver({
 
     const updatedOrNew = new Set();
 
-    const emitChild = (keyA, keyB, a, b, childSpecies, genderP) => {
+    const emitChild = (keyA, keyB, a, b, childSpecies, genderP, reversalSide = null) => {
       const outcomes = cachedOutcomeDistribution(a.mask, a.junk, b.mask, b.junk);
       for (const outcome of outcomes) {
         const successProb = outcome.p * genderP;
@@ -295,7 +314,7 @@ export function runSolver({
           allStates.set(childKey, {
             key: childKey, species: childSpecies, mask: outcome.mask, junk: outcome.junk, genderTag: 'ANY',
             effort: childEffort, depth: childDepth, origin: 'bred',
-            parentAKey: keyA, parentBKey: keyB, p: successProb, attempts,
+            parentAKey: keyA, parentBKey: keyB, p: successProb, attempts, reversalSide,
             ownedRefs: [],
           });
           updatedOrNew.add(childKey);
@@ -310,19 +329,23 @@ export function runSolver({
       if (!specialPairs.has(specialPairKey(a.species, b.species))) {
         // The overwhelming majority of pairs: child species doesn't depend
         // on gender, so a gender-agnostic lookup is always valid, and
-        // pairGenderProbability alone captures the full gender cost/feasibility.
-        const genderP = pairGenderProbability(a, b, maleProbOf);
+        // pairGenderInfo alone captures the full gender cost/feasibility
+        // (including whether a Pal Reverser is needed on one side).
+        const { p: genderP, reversalSide } = pairGenderInfo(a, b, maleProbOf);
         if (genderP <= 0) return;
         const childSpecies = childOf(a.species, null, b.species, null);
         if (childSpecies === null) return;
-        emitChild(keyA, keyB, a, b, childSpecies, genderP);
+        emitChild(keyA, keyB, a, b, childSpecies, genderP, reversalSide);
         return;
       }
 
       // Special-cased pair: the result depends on which parent is male vs
       // female, so every feasible concrete gender assignment must be tried
       // individually (a flexible 'ANY' state can't be queried with a null
-      // gender here -- that loses the rule match entirely).
+      // gender here -- that loses the rule match entirely). Reversal isn't
+      // offered here -- this only ever matters for Katress/Wixen, and the
+      // extra same-gender-fixed branch it would need is not worth the
+      // complexity for one pair.
       for (const asg of feasibleGenderAssignments(a, b, maleProbOf)) {
         const childSpecies = childOf(a.species, asg.aGender, b.species, asg.bGender);
         if (childSpecies === null) continue;
@@ -472,14 +495,18 @@ function reconstructRoute(state, allStates) {
       genderTag: state.genderTag, ownedRefs: state.ownedRefs, effort: state.effort, depth: 0,
     };
   }
-  const a = allStates.get(state.parentAKey);
-  const b = allStates.get(state.parentBKey);
+  const a = reconstructRoute(allStates.get(state.parentAKey), allStates);
+  const b = reconstructRoute(allStates.get(state.parentBKey), allStates);
+  // reversalSide only ever points at a fixed-gender (owned) parent -- bred
+  // intermediates are always genderTag 'ANY' and never need a Pal Reverser.
+  if (state.reversalSide === 'A') a.needsReversal = true;
+  else if (state.reversalSide === 'B') b.needsReversal = true;
   return {
     type: 'bred', species: state.species, mask: state.mask, junk: state.junk,
     effort: state.effort, depth: state.depth, p: state.p, attempts: state.attempts,
-    parentA: reconstructRoute(a, allStates),
-    parentB: reconstructRoute(b, allStates),
+    parentA: a,
+    parentB: b,
   };
 }
 
-export { pairGenderProbability, feasibleGenderAssignments, specialPairKey };
+export { pairGenderInfo, feasibleGenderAssignments, specialPairKey };

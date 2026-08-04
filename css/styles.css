@@ -335,6 +335,21 @@ body {
 .route-node-header { display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap; }
 .route-node-label { font-weight: 600; white-space: nowrap; }
 .route-node-tag { font-size: 0.78rem; color: var(--text-muted); margin: 0.15rem 0 0.4rem; white-space: nowrap; }
+.reverser-note { color: var(--warn); }
+.reverser-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  border: 1px solid var(--warn);
+  color: var(--warn);
+  font-size: 0.75rem;
+  font-weight: 700;
+  cursor: default;
+}
 
 /* Depth 0 (the final target's direct parents): side by side, like reading
    a single breeding pair left-to-right. */

@@ -23,7 +23,7 @@ import { test, runAll, assert, assertEqual, assertClose } from './js/testharness
 import { loadGameData, getPals, getPassives, getMeta, palByName } from './js/data.js';
 import { childOf } from './js/breeding.js';
 import { outcomeDistribution, popcount, choose, inheritCountDistribution, randomAddDistribution } from './js/probability.js';
-import { runSolver, checkPreflight, reachableSpeciesClosure, feasibleGenderAssignments } from './js/solver.js';
+import { runSolver, checkPreflight, reachableSpeciesClosure, feasibleGenderAssignments, pairGenderInfo } from './js/solver.js';
 
 const ctx = {};
 
@@ -341,6 +341,51 @@ test('feasibleGenderAssignments: regression for the bug where flexible (ANY) sta
 
   const sameGenderFixed = feasibleGenderAssignments({ species: 1, genderTag: 'M' }, { species: 2, genderTag: 'M' }, () => 0.5);
   assertEqual(sameGenderFixed.length, 0, 'two fixed males can never be paired');
+});
+
+test('pairGenderInfo: same-gender fixed pair is usable via Pal Reverser, flagged on one side', () => {
+  const sameGender = pairGenderInfo({ species: 1, genderTag: 'M' }, { species: 2, genderTag: 'M' }, () => 0.5);
+  assertEqual(sameGender.p, 1, 'a Pal Reverser makes the pairing fully usable, not just unlikely');
+  assertEqual(sameGender.reversalSide, 'B', 'exactly one side should be flagged as needing the item');
+
+  const diffGender = pairGenderInfo({ species: 1, genderTag: 'M' }, { species: 2, genderTag: 'F' }, () => 0.5);
+  assertEqual(diffGender.p, 1);
+  assertEqual(diffGender.reversalSide, null, 'no reversal needed when genders already differ');
+
+  const oneFixed = pairGenderInfo({ species: 1, genderTag: 'F' }, { species: 2, genderTag: 'ANY' }, (i) => (i === 2 ? 0.7 : 0.5));
+  assertClose(oneFixed.p, 0.7, 1e-9, 'flexible side must supply MALE at its species male-probability');
+  assertEqual(oneFixed.reversalSide, null, 'reversal only applies when both sides are fixed');
+});
+
+test('gender reversal: two owned same-gender Pals can still be bred, flagged in the route tree', () => {
+  const lamball = palByName('Lamball');
+  const legend = ctx.passives.find(p => p.name === 'Legend');
+  const lucky = ctx.passives.find(p => p.name === 'Lucky');
+  assert(lamball && legend && lucky, 'fixture pal/passives must exist');
+
+  // Split the two desired (non-random) passives across two MALE Lamballs so
+  // neither owned Pal alone already satisfies the target -- only breeding
+  // them together (which requires a Pal Reverser, since both are male) can.
+  const ownedPals = [
+    { speciesIdx: lamball.i, gender: 'MALE', passiveInternalNames: [legend.internalName] },
+    { speciesIdx: lamball.i, gender: 'MALE', passiveInternalNames: [lucky.internalName] },
+  ];
+  const result = runSolver({
+    ownedPals,
+    targetSpeciesIdx: lamball.i,
+    desiredPassiveNames: [legend.internalName, lucky.internalName],
+    maleProbOf: (i) => ctx.pals[i].maleProb,
+    genderRules: ctx.meta.genderSpecificRules,
+    maxSteps: 1,
+  });
+
+  assert(result.results.length > 0, 'expected a route breeding two same-gender Lamballs via reversal to combine both passives');
+  const best = result.results[0];
+  assertEqual(best.type, 'bred');
+  assertEqual(best.parentA.type, 'owned');
+  assertEqual(best.parentB.type, 'owned');
+  const reversedCount = (best.parentA.needsReversal ? 1 : 0) + (best.parentB.needsReversal ? 1 : 0);
+  assertEqual(reversedCount, 1, 'exactly one parent should be flagged as needing a Pal Reverser');
 });
 
 const reportEl = document.getElementById('report');
