@@ -105,7 +105,7 @@ function renderResults(result, request) {
   listEl.innerHTML = '';
   statusEl.textContent = result.results.length > 0
     ? `Found ${result.results.length} route(s) after searching ${result.rounds} generation(s) and ${result.stateCount.toLocaleString()} candidate Pals.`
-    : `No route found within the configured search limits (${result.rounds} generation(s), ${result.stateCount.toLocaleString()} candidates explored). Try raising "Max breeding generations" or "Beam width" in Settings.`;
+    : `No route found within the configured search limits (${result.rounds} generation(s), ${result.stateCount.toLocaleString()} candidates explored). Try raising "Beam width" in Settings -- start around 2000-3000 rather than jumping straight to the max, since search time grows much faster than the width does. Raising "Max breeding generations" can help too if the target just needs more steps.`;
 
   result.results.forEach((route, idx) => {
     const card = document.createElement('div');

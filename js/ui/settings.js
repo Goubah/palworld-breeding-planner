@@ -9,7 +9,7 @@ const FIELDS = [
   { key: 'timePerBreed', label: 'Minutes per breeding attempt', min: 1, max: 240, step: 1,
     hint: 'Used only to estimate route time -- it never affects the probabilities themselves.' },
   { key: 'beamWidth', label: 'Beam width (advanced)', min: 100, max: 20000, step: 100,
-    hint: 'Max candidate Pals kept per generation. Higher is more thorough but slower.' },
+    hint: 'Max candidate Pals kept per generation. Higher is more thorough but slower -- and cost grows much faster than the number itself, so raise it gradually (e.g. 1000 -> 3000) rather than jumping straight to the max.' },
   { key: 'maxResults', label: 'Number of routes to show', min: 1, max: 20, step: 1, hint: '' },
 ];
 
