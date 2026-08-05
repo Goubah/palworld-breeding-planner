@@ -1,0 +1,150 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Favicon generator</title>
+<!--
+  Generates favicon-32.png and apple-touch-icon.png. favicon.svg is
+  hand-written to match and lives at the repo root.
+
+  Run `py tools/og_save_server.py <port>` and open this page, then click Save.
+
+  The icon is the same egg as the social card, but deliberately NOT a
+  downscale of it: at 16px the card's speckles turn to noise and its hairline
+  crack disappears completely. So the shell is flat-shaded, the crack is much
+  thicker in proportion, and there is a defined outline -- without one, a pale
+  egg vanishes against a light browser tab strip.
+-->
+<style>
+  body { background:#1a1d24; color:#e6e8ee; font-family:"Segoe UI",system-ui,sans-serif; padding:20px; }
+  .row { display:flex; gap:28px; align-items:flex-end; margin-bottom:20px; }
+  .swatch { text-align:center; font-size:12px; color:#9aa0b0; }
+  canvas { display:block; margin-bottom:6px; image-rendering:pixelated; }
+  .light { background:#f4f4f6; padding:10px; border-radius:6px; }
+  .dark  { background:#12151c; padding:10px; border-radius:6px; }
+  button { padding:8px 16px; font-size:15px; cursor:pointer; }
+</style>
+
+<p>Actual size, on light and dark tab strips:</p>
+<div class="row">
+  <div class="light"><div class="swatch"><canvas id="l16" width="16" height="16"></canvas>16</div></div>
+  <div class="light"><div class="swatch"><canvas id="l32" width="32" height="32"></canvas>32</div></div>
+  <div class="dark"><div class="swatch"><canvas id="d16" width="16" height="16"></canvas>16</div></div>
+  <div class="dark"><div class="swatch"><canvas id="d32" width="32" height="32"></canvas>32</div></div>
+</div>
+
+<p>Magnified 32 (8x), and the 180 touch icon:</p>
+<div class="row">
+  <div class="swatch"><canvas id="big" width="256" height="256"></canvas>32 @ 8x</div>
+  <div class="swatch"><canvas id="touch" width="180" height="180"></canvas>180</div>
+</div>
+
+<button id="save">Save favicon-32.png + apple-touch-icon.png</button>
+<pre id="log"></pre>
+
+<script>
+// Draws the icon into ctx at size S. `pad` leaves breathing room; touch icons
+// want more because iOS rounds the corners off.
+function drawEgg(ctx, S, opts = {}) {
+  const pad = opts.pad ?? 0.06;
+  const cx = S / 2;
+  const rx = S * (0.5 - pad) * 0.82;
+  const ry = S * (0.5 - pad);
+  const cy = S / 2 + S * 0.012;
+
+  // Same control-point rule as the social card: horizontal from each pole so
+  // the tips round, with the top offset smaller so the widest point sits low.
+  const CP_TOP = rx * 1.10, CP_BOTTOM = rx * 1.62;
+  const egg = () => {
+    ctx.beginPath();
+    ctx.moveTo(cx, cy - ry);
+    ctx.bezierCurveTo(cx + CP_TOP, cy - ry, cx + CP_BOTTOM, cy + ry, cx, cy + ry);
+    ctx.bezierCurveTo(cx - CP_BOTTOM, cy + ry, cx - CP_TOP, cy - ry, cx, cy - ry);
+    ctx.closePath();
+  };
+
+  ctx.clearRect(0, 0, S, S);
+
+  if (opts.bg) {                       // opaque plate for iOS
+    ctx.fillStyle = opts.bg;
+    ctx.fillRect(0, 0, S, S);
+  }
+
+  // Shell: a simple two-stop gradient. The card's speckles and iridescent
+  // sheen are dropped entirely -- below ~48px they read as dirt, not detail.
+  const g = ctx.createLinearGradient(cx - rx, cy - ry, cx + rx * 0.7, cy + ry);
+  g.addColorStop(0, '#f7f9fd');
+  g.addColorStop(0.55, '#d3dbea');
+  g.addColorStop(1, '#93a0b8');
+  egg();
+  ctx.fillStyle = g;
+  ctx.fill();
+
+  // Outline, so the pale shell still has a silhouette on a white tab strip.
+  ctx.strokeStyle = '#4b566e';
+  ctx.lineWidth = Math.max(1, S * 0.045);
+  ctx.stroke();
+
+  // Crack: proportionally far heavier than the card's, or it disappears.
+  ctx.save();
+  egg();
+  ctx.clip();
+  const k = (fx, fy) => [cx + rx * fx, cy + ry * fy];
+  const pts = [k(0.10, -1.02), k(-0.20, -0.42), k(0.22, -0.04), k(-0.14, 0.42)];
+  ctx.beginPath();
+  ctx.moveTo(pts[0][0], pts[0][1]);
+  for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i][0], pts[i][1]);
+  ctx.strokeStyle = '#232b3d';
+  ctx.lineWidth = Math.max(1.4, S * 0.085);
+  ctx.lineJoin = 'round';
+  ctx.lineCap = 'round';
+  ctx.stroke();
+
+  // One branch only. More than that is mush at favicon scale.
+  if (S >= 28) {
+    const b = [k(0.22, -0.04), k(0.60, -0.16)];
+    ctx.beginPath();
+    ctx.moveTo(b[0][0], b[0][1]);
+    ctx.lineTo(b[1][0], b[1][1]);
+    ctx.lineWidth = Math.max(1, S * 0.055);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+for (const [id, S] of [['l16',16],['l32',32],['d16',16],['d32',32]]) {
+  drawEgg(document.getElementById(id).getContext('2d'), S);
+}
+
+// magnified view of the real 32px raster, so pixel-level problems are visible
+const tmp = document.createElement('canvas'); tmp.width = tmp.height = 32;
+drawEgg(tmp.getContext('2d'), 32);
+const big = document.getElementById('big').getContext('2d');
+big.imageSmoothingEnabled = false;
+big.drawImage(tmp, 0, 0, 256, 256);
+
+drawEgg(document.getElementById('touch').getContext('2d'), 180, { pad: 0.14, bg: '#12151c' });
+
+function post(canvas, name) {
+  return new Promise((res, rej) => canvas.toBlob(
+    b => fetch('/save-og?name=' + name, { method: 'POST', body: b })
+      .then(r => r.text().then(t => r.ok ? res(t) : rej(new Error(t)))).catch(rej),
+    'image/png'
+  ));
+}
+
+document.getElementById('save').addEventListener('click', async () => {
+  const log = document.getElementById('log');
+  try {
+    const c32 = document.createElement('canvas'); c32.width = c32.height = 32;
+    drawEgg(c32.getContext('2d'), 32);
+    log.textContent = await post(c32, 'favicon-32.png') + '\n';
+    log.textContent += await post(document.getElementById('touch'), 'apple-touch-icon.png');
+  } catch (e) { log.textContent = 'ERROR: ' + e.message; }
+});
+window.__save = async () => {
+  const c32 = document.createElement('canvas'); c32.width = c32.height = 32;
+  drawEgg(c32.getContext('2d'), 32);
+  const a = await post(c32, 'favicon-32.png');
+  const b = await post(document.getElementById('touch'), 'apple-touch-icon.png');
+  return a + ' | ' + b;
+};
+</script>

@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!--
+    Matches tools/make_favicon.html's canvas drawing (same control-point rule
+    as the social card: horizontal from each pole so the tips round, smaller
+    top offset so the widest point sits low). Kept deliberately simple - the
+    card's speckles and iridescent sheen read as dirt below ~48px.
+  -->
+  <defs>
+    <linearGradient id="shell" gradientUnits="userSpaceOnUse"
+                    x1="8.9" y1="4.6" x2="48.2" y2="60.9">
+      <stop offset="0" stop-color="#f7f9fd"/>
+      <stop offset="0.55" stop-color="#d3dbea"/>
+      <stop offset="1" stop-color="#93a0b8"/>
+    </linearGradient>
+    <clipPath id="shellClip">
+      <path d="M32 4.6C57.4 4.6 69.4 60.9 32 60.9C-5.4 60.9 6.6 4.6 32 4.6Z"/>
+    </clipPath>
+  </defs>
+
+  <!-- shell, with an outline so the pale fill still has a silhouette on a
+       light browser tab strip -->
+  <path d="M32 4.6C57.4 4.6 69.4 60.9 32 60.9C-5.4 60.9 6.6 4.6 32 4.6Z"
+        fill="url(#shell)" stroke="#4b566e" stroke-width="2.9"/>
+
+  <!-- crack, proportionally much heavier than the card's or it vanishes -->
+  <g clip-path="url(#shellClip)" fill="none" stroke="#232b3d"
+     stroke-linejoin="round" stroke-linecap="round">
+    <path d="M34.3 4 L27.4 20.9 L37.1 31.6 L28.8 44.6" stroke-width="5.4"/>
+    <path d="M37.1 31.6 L45.9 28.3" stroke-width="3.5"/>
+  </g>
+</svg>

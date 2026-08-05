@@ -16,8 +16,10 @@ in place until the design is approved.
 
 import http.server
 import os
+import re
 import socketserver
 import sys
+import urllib.parse
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DEFAULT_OUT = os.path.join(REPO_ROOT, 'assets', 'og-cover.jpg')
@@ -30,8 +32,21 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         super().__init__(*args, directory=REPO_ROOT, **kwargs)
 
     def do_POST(self):
-        if self.path != '/save-og':
+        parsed = urllib.parse.urlparse(self.path)
+        if parsed.path != '/save-og':
             self.send_error(404)
+            return
+
+        # Optional ?name=foo.png writes to that file in the repo root instead
+        # of the configured output. Restricted to a bare safe filename so a
+        # stray request can't traverse out of the repo.
+        name = urllib.parse.parse_qs(parsed.query).get('name', [None])[0]
+        if name is None:
+            out_path = OUT_PATH
+        elif re.fullmatch(r'[A-Za-z0-9._-]+\.(png|jpg)', name) and '..' not in name:
+            out_path = os.path.join(REPO_ROOT, name)
+        else:
+            self.send_error(400, 'unsafe name')
             return
 
         length = int(self.headers.get('Content-Length', 0))
@@ -40,20 +55,22 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             return
 
         body = self.rfile.read(length)
-        # JPEG magic, so a mis-wired fetch can't silently write garbage here.
-        if not body.startswith(b'\xff\xd8\xff'):
-            self.send_error(400, 'not a JPEG')
+        # Match magic bytes to the extension, so a mis-wired fetch can't
+        # silently write garbage (or a JPEG named .png) into the repo.
+        expected = b'\x89PNG\r\n\x1a\n' if out_path.endswith('.png') else b'\xff\xd8\xff'
+        if not body.startswith(expected):
+            self.send_error(400, f'body does not match {os.path.splitext(out_path)[1]}')
             return
 
-        os.makedirs(os.path.dirname(OUT_PATH), exist_ok=True)
-        with open(OUT_PATH, 'wb') as fh:
+        os.makedirs(os.path.dirname(out_path), exist_ok=True)
+        with open(out_path, 'wb') as fh:
             fh.write(body)
 
         self.send_response(200)
         self.send_header('Content-Type', 'text/plain')
         self.end_headers()
-        self.wfile.write(f'wrote {len(body)} bytes to {OUT_PATH}'.encode())
-        print(f'[og] wrote {len(body)} bytes -> {OUT_PATH}', flush=True)
+        self.wfile.write(f'wrote {len(body)} bytes to {out_path}'.encode())
+        print(f'[og] wrote {len(body)} bytes -> {out_path}', flush=True)
 
     def log_message(self, *args):
         pass  # keep the console to just the [og] lines above
