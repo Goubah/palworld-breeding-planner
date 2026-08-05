@@ -61,6 +61,8 @@ export function ownedPalToState(pal, desiredIndex) {
   };
 }
 
+function popcountMask(m) { let c = 0; while (m) { m &= m - 1; c++; } return c; }
+
 export function stateKey(species, mask, junk, genderTag) {
   return `${species},${mask},${junk},${genderTag}`;
 }
@@ -371,6 +373,8 @@ export function runSolver({
 
   const allStates = new Map(); // key -> stateRecord
   const dominancePruned = []; // per-round removal counts, for diagnosing churn
+  const speciesDiversity = []; // per-round distinct live species, for tuning the beam
+  const maskHistogram = []; // per-round live-state counts by number of desired passives
   let frontierNew = [];
 
   ownedPals.forEach((pal, idx) => {
@@ -537,6 +541,21 @@ export function runSolver({
       const perMaskBudget = Math.max(1, Math.floor(budget / byMask.size));
 
       const keep = new Set();
+
+      // Never evict a state of the target species. The answer must be one of
+      // these, so discarding them throws away partial results outright.
+      //
+      // This was the actual failure on a real 204-Pal roster: by round 2 the
+      // beam held 50 states carrying all four desired passives, but not one
+      // of them was the target species, so the search reported nothing and
+      // then converged. Bucketing by mask alone doesn't help, because within
+      // a bucket states compete purely on cost and the target loses to
+      // whatever happens to be cheapest.
+      //
+      // The reservation is tiny: at most 16 masks x 5 junk x 3 gender tags =
+      // 240 states, against a beam width of 1000 or more.
+      for (const s of bred) if (s.species === targetSpeciesIdx) keep.add(s.key);
+
       for (const group of byMask.values()) {
         group.sort((x, y) => x.effort - y.effort);
         for (const s of group.slice(0, perMaskBudget)) keep.add(s.key);
@@ -563,7 +582,16 @@ export function runSolver({
     // to decide whether the beam runs at all; reporting that number would
     // overstate the frontier, since it includes everything just discarded.
     let liveAfterPrune = 0;
-    for (const s of allStates.values()) if (!s.dominated) liveAfterPrune++;
+    const liveSpecies = new Set();
+    for (const s of allStates.values()) {
+      if (s.dominated) continue;
+      liveAfterPrune++;
+      liveSpecies.add(s.species);
+    }
+    speciesDiversity.push(liveSpecies.size);
+    const hist = [0, 0, 0, 0, 0];
+    for (const s of allStates.values()) if (!s.dominated) hist[popcountMask(s.mask)]++;
+    maskHistogram.push(hist.join('/'));
 
     frontierNew = Array.from(updatedOrNew);
     if (onProgress) onProgress(round, liveAfterPrune);
@@ -606,6 +634,8 @@ export function runSolver({
     // counting them would inflate the "candidate Pals" figure shown in the UI.
     stateCount: Array.from(allStates.values()).filter(s => !s.dominated).length,
     dominancePruned,
+    speciesDiversity,
+    maskHistogram,
   };
 }
 
