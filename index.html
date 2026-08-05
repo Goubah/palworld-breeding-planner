@@ -83,33 +83,32 @@
     <h2>About this breeding calculator</h2>
     <p>
       Most Palworld breeding calculators answer &ldquo;what do these two Pals make?&rdquo; or
-      &ldquo;which pairs produce this Pal?&rdquo;. This one starts from the opposite end: you
-      enter the Pals you already own, along with their genders and passive skills, then name a
-      target Pal and up to four passive skills you want it to end up with. It searches
-      multi-generation breeding routes that begin only from your roster &mdash; no assuming you
-      can go catch a perfect parent.
+      &ldquo;which pairs produce this Pal?&rdquo;. This one works the other way round. You enter
+      the Pals you already own, with their genders and passive skills, then name a target Pal
+      and up to four passive skills you want on it. It searches multi-generation breeding routes
+      that start from your roster only. There is no fallback that assumes you can go and catch a
+      better parent.
     </p>
-    <h3>Passive skills are part of the search, not an afterthought</h3>
+    <h3>Passive skills</h3>
     <p>
-      Passive skill inheritance is modelled on the game&rsquo;s own numbers: a child draws its
-      passives from the combined pool of both parents on a 40/30/20/10 weighting, with random
-      passives filling any remaining slots. Every step of a route shows the real chance per egg,
-      how many eggs you should expect to hatch, and a rough time estimate, so you can tell a
-      one-hour plan from a twenty-hour one before committing to it.
+      Passive inheritance uses the game&rsquo;s own numbers. A child draws its passives from the
+      combined pool of both parents on a 40/30/20/10 weighting, and random passives fill any
+      slots left over. Every step of a route shows the chance per egg, how many eggs you should
+      expect to hatch, and a rough time estimate. That way you can tell a one-hour plan from a
+      twenty-hour one before you start.
     </p>
     <h3>Gender ratios and Pal Reversers</h3>
     <p>
       Breeding needs one male and one female, and many species are heavily gender-skewed, so
-      gender is priced into every step rather than ignored. Where a pairing only works by
-      flipping a Pal&rsquo;s gender with a Pal Reverser, the route says so explicitly instead of
-      quietly pretending the pairing is free.
+      gender is part of the cost of every step. Where a pairing only works by flipping a
+      Pal&rsquo;s gender with a Pal Reverser, the route tells you which Pal needs it.
     </p>
     <h3>Runs entirely in your browser</h3>
     <p>
-      The breeding table is derived from the game&rsquo;s own data files. Everything &mdash;
-      your roster and the whole search &mdash; stays in your browser; nothing is uploaded, and
-      there is no account to make. Results come from a heuristic search, so they are good
-      routes rather than proven-optimal ones.
+      The breeding table is derived from the game&rsquo;s own data files. Your roster and the
+      whole search stay in your browser. Nothing is uploaded and there is no account to make.
+      Route finding is a heuristic search, so it finds good routes, but not necessarily the best
+      one that exists.
     </p>
   </section>
 </main>

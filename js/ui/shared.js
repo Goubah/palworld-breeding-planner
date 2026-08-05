@@ -204,7 +204,7 @@ export function createPassivePicker(onChange, { isExcluded } = {}) {
         const tag = document.createElement('span');
         tag.className = 'passive-tag';
         tag.textContent = 'parent-only';
-        attachTooltip(tag, 'Can never be randomly rolled — must come from a parent.');
+        attachTooltip(tag, 'Can never be randomly rolled. Must come from a parent.');
         row.appendChild(tag);
       }
     },

@@ -111,7 +111,7 @@ export function initTargetTab(container, { onRun }) {
       reachEl.textContent = `✗ ${targetSpecies.name} needs at least ${plural(pre.minGenerations, 'breeding generation')}, but "Max breeding generations" is currently set to ${pre.maxSteps}. Raise it in Advanced Settings, then try again.`;
     } else if (pre.minGenerations === 0) {
       reachEl.className = 'warn';
-      reachEl.textContent = `⚠ You already own ${targetSpecies.name}, so no breeding is needed for the species itself. If yours is missing some of the desired passives, run the search anyway — it can breed a fresh ${targetSpecies.name} that combines them.`;
+      reachEl.textContent = `⚠ You already own ${targetSpecies.name}, so no breeding is needed for the species itself. If yours is missing some of the desired passives, run the search anyway and it will breed a fresh one that combines them.`;
     } else {
       reachEl.className = 'ok';
       reachEl.textContent = `✓ ${targetSpecies.name} is reachable in ${plural(pre.minGenerations, 'generation')} from your current roster.`;
@@ -128,7 +128,7 @@ export function initTargetTab(container, { onRun }) {
         p.textContent = `⚠ ${check.name}: nobody owns it, but it can still appear via random inheritance (unlikely).`;
       } else {
         p.className = 'error';
-        p.textContent = `✗ ${check.name}: nobody owns it, and it can never be randomly rolled — it must come from a parent.`;
+        p.textContent = `✗ ${check.name}: nobody owns it, and it can never be randomly rolled, so it must come from a parent.`;
       }
       preflightCard.appendChild(p);
     }
@@ -136,7 +136,7 @@ export function initTargetTab(container, { onRun }) {
     if (desiredPassives.length === 0) {
       const p = document.createElement('p');
       p.className = 'muted';
-      p.textContent = 'No desired passives selected — the search will just look for the Pal.';
+      p.textContent = 'No desired passives selected. The search will just look for the Pal.';
       preflightCard.appendChild(p);
     }
 

@@ -105,7 +105,7 @@ function renderResults(result, request) {
   listEl.innerHTML = '';
   statusEl.textContent = result.results.length > 0
     ? `Found ${plural(result.results.length, 'route')} after searching ${plural(result.rounds, 'generation')} and ${plural(result.stateCount, 'candidate Pal')}.`
-    : `No route found within the current search limits (${plural(result.rounds, 'generation')}, ${plural(result.stateCount, 'candidate Pal')} explored). Try raising "Beam width" in Advanced Settings — 2000–3000 first, since search time grows much faster than the width does. Raising "Max breeding generations" can help too.`;
+    : `No route found within the current search limits (${plural(result.rounds, 'generation')}, ${plural(result.stateCount, 'candidate Pal')} explored). Try raising "Beam width" in Advanced Settings, 2000 to 3000 first. Raising "Max breeding generations" can help too.`;
 
   result.results.forEach((route, idx) => {
     const card = document.createElement('div');
