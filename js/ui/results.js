@@ -46,11 +46,19 @@ export function initResultsTab(container) {
 
 function handleWorkerMessage(ev) {
   const msg = ev.data;
-  if (msg.type === 'progress') {
-    statusEl.textContent = `Searching... generation ${msg.round}, ${msg.size.toLocaleString()} candidate Pals so far.`;
+  if (msg.type === 'attempt') {
+    // Only mentioned from the second attempt on. Announcing "attempt 1 of 4"
+    // up front would imply three more are coming, when most searches finish
+    // on the first and never widen at all.
+    if (msg.attempt > 1) {
+      statusEl.textContent = `No route at that search width. Widening to ${msg.beamWidth.toLocaleString()} and trying again (attempt ${msg.attempt} of ${msg.maxAttempts})...`;
+    }
+  } else if (msg.type === 'progress') {
+    const widening = msg.attempt > 1 ? ` at search width ${msg.beamWidth.toLocaleString()}` : '';
+    statusEl.textContent = `Searching${widening}... generation ${msg.round}, ${msg.size.toLocaleString()} candidate Pals so far.`;
   } else if (msg.type === 'result') {
     cancelBtn.hidden = true;
-    renderResults(msg.result, currentRequest);
+    renderResults(msg.result, currentRequest, msg);
   } else if (msg.type === 'cancelled') {
     cancelBtn.hidden = true;
     statusEl.textContent = 'Search cancelled.';
@@ -101,11 +109,16 @@ function formatEffort(minutes) {
   return `~${(hrs / 24).toFixed(1)} days`;
 }
 
-function renderResults(result, request) {
+function renderResults(result, request, meta = {}) {
   listEl.innerHTML = '';
+  const widened = meta.attempts > 1
+    ? ` The search widened to ${meta.finalBeamWidth.toLocaleString()} to find this.`
+    : '';
   statusEl.textContent = result.results.length > 0
-    ? `Found ${plural(result.results.length, 'route')} after searching ${plural(result.rounds, 'generation')} and ${plural(result.stateCount, 'candidate Pal')}.`
-    : `No route found within the current search limits (${plural(result.rounds, 'generation')}, ${plural(result.stateCount, 'candidate Pal')} explored). Try raising "Beam width" in Advanced Settings, 2000 to 3000 first. Raising "Max breeding generations" can help too.`;
+    ? `Found ${plural(result.results.length, 'route')} after searching ${plural(result.rounds, 'generation')} and ${plural(result.stateCount, 'candidate Pal')}.${widened}`
+    // The search already widened on its own, so telling the reader to raise
+    // the beam width would be advice it has taken several times already.
+    : `No route found. The search widened to ${plural(meta.finalBeamWidth || 0, 'candidate Pal')} across ${plural(meta.attempts || 1, 'attempt')} without success. Raising "Max breeding generations" in Advanced Settings can help if the target needs more steps; otherwise the passives you want may not be reachable from your current roster.`;
 
   result.results.forEach((route, idx) => {
     const card = document.createElement('div');
