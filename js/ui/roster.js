@@ -1,7 +1,7 @@
 // "My Pals" section: add/edit/duplicate/delete owned Pals, persisted via
 // store.js, plus JSON import/export.
 
-import { getPassives, palByInternal } from '../data.js';
+import { getPassives, palByInternal, passiveByInternal } from '../data.js';
 import * as store from '../store.js';
 import { createSpeciesPicker, createPassivePicker, renderPalIcon, renderPassiveChip, plural } from './shared.js';
 
@@ -248,24 +248,96 @@ export function initRosterTab(container) {
   const listTitle = document.createElement('h3');
   listTitle.textContent = 'Your Pals';
   listSection.appendChild(listTitle);
+  // Roster controls. A large roster is unusable without these: a real one
+  // seen in testing had 204 Pals, which is ~26 screens of scrolling to reach
+  // the last entry, with no way to answer "do I already own a Serious Sparkit"
+  // short of reading every row.
+  const controls = document.createElement('div');
+  controls.className = 'roster-controls';
+
+  const filterInput = document.createElement('input');
+  filterInput.type = 'search';
+  filterInput.className = 'roster-filter';
+  // Matches passives as well as species, so typing a passive name acts as a
+  // filter without needing a second dropdown for it.
+  filterInput.placeholder = 'Filter by Pal or passive...';
+  filterInput.addEventListener('input', renderList);
+  controls.appendChild(filterInput);
+
+  const sortSelect = document.createElement('select');
+  sortSelect.className = 'roster-sort';
+  for (const [value, label] of [
+    ['added', 'Recently added'],
+    ['name', 'Name (A-Z)'],
+    ['passives', 'Most passives'],
+  ]) {
+    const opt = document.createElement('option');
+    opt.value = value; opt.textContent = label;
+    sortSelect.appendChild(opt);
+  }
+  sortSelect.addEventListener('change', renderList);
+  controls.appendChild(sortSelect);
+
+  const countEl = document.createElement('span');
+  countEl.className = 'roster-count muted';
+  controls.appendChild(countEl);
+  listSection.appendChild(controls);
+
   const listEl = document.createElement('div');
   listEl.className = 'pal-list';
   listSection.appendChild(listEl);
   container.appendChild(listSection);
 
+  /** Species name or any of its passives, matched case-insensitively. */
+  function matchesFilter(pal, species, needle) {
+    if (!needle) return true;
+    if (species.name.toLowerCase().includes(needle)) return true;
+    const names = Array.isArray(pal.passiveInternalNames) ? pal.passiveInternalNames : [];
+    return names.some(n => {
+      const p = passiveByInternal(n);
+      return p && p.name.toLowerCase().includes(needle);
+    });
+  }
+
   function renderList() {
     listEl.innerHTML = '';
     const roster = store.getRoster();
     if (roster.length === 0) {
+      controls.hidden = true;
       const empty = document.createElement('p');
       empty.className = 'empty-state';
       empty.textContent = 'No Pals added yet. Add your first Pal above.';
       listEl.appendChild(empty);
       return;
     }
-    for (const pal of roster) {
-      const species = palByInternal(pal.speciesInternal);
-      if (!species) continue;
+    controls.hidden = false;
+
+    const needle = filterInput.value.trim().toLowerCase();
+    let shown = roster
+      .map(pal => ({ pal, species: palByInternal(pal.speciesInternal) }))
+      .filter(x => x.species && matchesFilter(x.pal, x.species, needle));
+
+    const sortBy = sortSelect.value;
+    if (sortBy === 'name') {
+      shown.sort((a, b) => a.species.name.localeCompare(b.species.name));
+    } else if (sortBy === 'passives') {
+      const count = x => (Array.isArray(x.pal.passiveInternalNames) ? x.pal.passiveInternalNames.length : 0);
+      shown.sort((a, b) => count(b) - count(a) || a.species.name.localeCompare(b.species.name));
+    }
+
+    countEl.textContent = shown.length === roster.length
+      ? plural(roster.length, 'Pal')
+      : `${shown.length} of ${plural(roster.length, 'Pal')}`;
+
+    if (shown.length === 0) {
+      const none = document.createElement('p');
+      none.className = 'empty-state';
+      none.textContent = `No Pals match "${filterInput.value.trim()}".`;
+      listEl.appendChild(none);
+      return;
+    }
+
+    for (const { pal, species } of shown) {
       const row = document.createElement('div');
       row.className = 'pal-row';
       row.appendChild(renderPalIcon(species, 36));
