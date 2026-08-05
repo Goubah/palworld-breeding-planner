@@ -243,6 +243,104 @@ function feasibleGenderAssignments(a, b, maleProbOf) {
 }
 
 /**
+ * Expands `keep` in place to include every ancestor of anything already in it.
+ *
+ * A kept state's parents (and theirs, recursively) must never be dropped,
+ * however poor they look in isolation -- they're load-bearing for
+ * reconstructing that state's route. Skipping this doesn't merely lose a step
+ * from the display: it leaves a dangling parentAKey/parentBKey that crashes
+ * reconstructRoute() outright once the ancestor is actually deleted.
+ */
+function protectAncestors(keep, allStates) {
+  let frontier = Array.from(keep);
+  while (frontier.length > 0) {
+    const next = [];
+    for (const key of frontier) {
+      const s = allStates.get(key);
+      if (!s || s.origin !== 'bred') continue;
+      for (const parentKey of [s.parentAKey, s.parentBKey]) {
+        if (parentKey && !keep.has(parentKey)) {
+          keep.add(parentKey);
+          next.push(parentKey);
+        }
+      }
+    }
+    frontier = next;
+  }
+}
+
+/**
+ * True when `t` is at least as good as `s` for every purpose the search cares
+ * about, so `s` can be discarded without losing any route.
+ *
+ * Requires the same species and the same gender tag, then: a superset of the
+ * desired passives, no more junk, and no more effort. Each of those is
+ * monotone in the outcome distribution -- more desired passives in the parent
+ * pool can only help, and junk only dilutes the pool the child draws from.
+ *
+ * Gender must match exactly rather than treating 'ANY' as universally better.
+ * It isn't: two fixed-gender parents pair at probability 1 (a Pal Reverser
+ * covers the same-gender case), whereas pairing a flexible parent against a
+ * fixed one costs that species' gender ratio. Neither dominates the other.
+ */
+function dominates(t, s) {
+  return t.species === s.species
+    && t.genderTag === s.genderTag
+    && (t.mask & s.mask) === s.mask   // t carries every desired passive s has
+    && t.junk <= s.junk
+    && t.effort <= s.effort;
+}
+
+/**
+ * Marks bred states that some other state dominates, so they are no longer
+ * expanded as parents. Unlike the beam this is lossless: a dominated state
+ * cannot appear in any route a surviving state couldn't serve at least as
+ * cheaply. Owned Pals are never marked -- they're real Pals the player has,
+ * and they anchor the route display.
+ *
+ * Tombstones rather than deletes, which matters a lot. Deleting was the
+ * obvious first implementation and it was measurably worse: the pair that
+ * produced a dominated state is still in the frontier, so emitChild found no
+ * existing entry and recreated it every single round. That churn kept
+ * updatedOrNew large, which grew the O(n^2) pair scan and stopped the search
+ * converging early. Leaving the record in place means emitChild sees it and
+ * skips, so each state is derived once. It also makes dangling parent
+ * pointers impossible, so no ancestor protection is needed here.
+ *
+ * Returns the number of states newly marked.
+ */
+function pruneDominated(allStates, updatedOrNew) {
+  const groups = new Map();
+  for (const s of allStates.values()) {
+    const g = `${s.species},${s.genderTag}`;
+    let arr = groups.get(g);
+    if (!arr) groups.set(g, arr = []);
+    arr.push(s);
+  }
+
+  let marked = 0;
+  for (const group of groups.values()) {
+    if (group.length < 2) continue;
+    group.sort((a, b) => a.effort - b.effort);
+    for (let i = 0; i < group.length; i++) {
+      const s = group[i];
+      if (s.origin !== 'bred' || s.dominated) continue;
+      for (let j = 0; j < i; j++) {        // only states already at <= effort
+        const t = group[j];
+        if (t.dominated) continue;         // don't dominate via a tombstone
+        if (dominates(t, s)) {
+          s.dominated = true;
+          updatedOrNew.delete(s.key);
+          marked++;
+          break;
+        }
+      }
+    }
+  }
+  return marked;
+}
+
+/**
  * Run the beam search.
  *  - ownedPals: [{ speciesIdx, gender: 'MALE'|'FEMALE', passiveInternalNames: string[] }]
  *  - desiredPassiveNames: up to 4 passive internalNames (order defines bit assignment)
@@ -260,6 +358,7 @@ export function runSolver({
   timePerBreed = DEFAULTS.timePerBreed,
   maxResults = DEFAULTS.maxResults,
   onProgress = null,
+  useDominance = true, // exposed so benchmarks can A/B it on an identical roster
 }) {
   const desiredIndex = buildDesiredIndex(desiredPassiveNames);
   const fullMask = desiredPassiveNames.length >= 4 ? 0b1111 : (1 << desiredPassiveNames.length) - 1;
@@ -271,6 +370,7 @@ export function runSolver({
   const specialPairs = new Set(genderRules.map(r => specialPairKey(r.p1, r.p2)));
 
   const allStates = new Map(); // key -> stateRecord
+  const dominancePruned = []; // per-round removal counts, for diagnosing churn
   let frontierNew = [];
 
   ownedPals.forEach((pal, idx) => {
@@ -317,6 +417,8 @@ export function runSolver({
             parentAKey: keyA, parentBKey: keyB, p: successProb, attempts, reversalSide,
             ownedRefs: [],
           });
+          // A strictly cheaper route may lift it back out of domination, so
+          // let the next pruneDominated pass re-judge it from scratch.
           updatedOrNew.add(childKey);
         }
       }
@@ -325,6 +427,9 @@ export function runSolver({
     const considerPair = (keyA, keyB) => {
       const a = allStates.get(keyA), b = allStates.get(keyB);
       if (!a || !b) return;
+      // Tombstoned by pruneDominated: some other state does everything this
+      // one does at no greater cost, so expanding it can only duplicate work.
+      if (a.dominated || b.dominated) return;
 
       // keyA === keyB means "breed this state with itself" -- fine for a
       // bred/'ANY' state (re-hatching is unlimited by assumption), but for an
@@ -368,8 +473,15 @@ export function runSolver({
       for (let j = 0; j < oldKeys.length; j++) considerPair(newKeys[i], oldKeys[j]);
     }
 
+    // Lossless pass first: drop states some other state strictly beats. This
+    // runs before the beam so the beam's budget is spent on states that are
+    // actually distinct, rather than on near-duplicates that differ only by
+    // carrying extra junk at higher cost.
+    if (useDominance) dominancePruned.push(pruneDominated(allStates, updatedOrNew));
+
     // Beam prune: keep all owned leaves (effort 0, always useful), cap bred
-    // states to the configured beam width.
+    // states to the configured beam width. Unlike the pass above this IS
+    // lossy -- it can discard a state that was on the only cheap route.
     //
     // Critical: this must NOT rank purely by effort. Accumulating desired
     // passives is inherently expensive (each one costs multiple breeding
@@ -387,9 +499,17 @@ export function runSolver({
     // against the much larger, much cheaper mask=0 population. Leftover
     // budget from sparsely-populated buckets is redistributed so capacity
     // is never wasted.
-    if (allStates.size > beamWidth) {
-      const bred = Array.from(allStates.values()).filter(s => s.origin === 'bred');
-      const ownedCount = allStates.size - bred.length;
+    // Count live states only: tombstones aren't expanded, so letting them
+    // trip the beam would prune real candidates to make room for nothing.
+    let liveCount = 0;
+    for (const s of allStates.values()) if (!s.dominated) liveCount++;
+
+    if (liveCount > beamWidth) {
+      // Tombstoned states are never expanded, so they cost only memory and
+      // shouldn't eat the beam's budget or be considered for eviction (which
+      // would just let emitChild recreate them).
+      const bred = Array.from(allStates.values()).filter(s => s.origin === 'bred' && !s.dominated);
+      const ownedCount = Array.from(allStates.values()).filter(s => s.origin === 'owned').length;
       const budget = Math.max(0, beamWidth - ownedCount);
 
       const byMask = new Map();
@@ -412,27 +532,7 @@ export function runSolver({
         }
       }
 
-      // A kept state's ancestors (its parentA/parentB, and theirs, ...) must
-      // never be pruned, however low-mask or high-effort they look in
-      // isolation -- they're load-bearing for reconstructing this state's
-      // route. Skipping this step doesn't just lose a step from the display:
-      // it leaves a dangling parentAKey/parentBKey that crashes
-      // reconstructRoute() outright once that ancestor is actually deleted.
-      let frontier = Array.from(keep);
-      while (frontier.length > 0) {
-        const next = [];
-        for (const key of frontier) {
-          const s = allStates.get(key);
-          if (!s || s.origin !== 'bred') continue;
-          for (const parentKey of [s.parentAKey, s.parentBKey]) {
-            if (parentKey && !keep.has(parentKey)) {
-              keep.add(parentKey);
-              next.push(parentKey);
-            }
-          }
-        }
-        frontier = next;
-      }
+      protectAncestors(keep, allStates);
 
       for (const s of bred) {
         if (!keep.has(s.key)) {
@@ -443,7 +543,7 @@ export function runSolver({
     }
 
     frontierNew = Array.from(updatedOrNew);
-    if (onProgress) onProgress(round, allStates.size);
+    if (onProgress) onProgress(round, liveCount);
   }
 
   // Different (mask, junk) outcomes from the exact same pair of parents
@@ -479,7 +579,10 @@ export function runSolver({
   return {
     results,
     rounds: round,
-    stateCount: allStates.size,
+    // Live states only. Tombstones are an internal bookkeeping detail, and
+    // counting them would inflate the "candidate Pals" figure shown in the UI.
+    stateCount: Array.from(allStates.values()).filter(s => !s.dominated).length,
+    dominancePruned,
   };
 }
 
@@ -519,4 +622,4 @@ function reconstructRoute(state, allStates) {
   };
 }
 
-export { pairGenderInfo, feasibleGenderAssignments, specialPairKey };
+export { pairGenderInfo, feasibleGenderAssignments, specialPairKey, dominates };

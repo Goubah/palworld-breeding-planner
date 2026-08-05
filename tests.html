@@ -23,7 +23,7 @@ import { test, runAll, assert, assertEqual, assertClose } from './js/testharness
 import { loadGameData, getPals, getPassives, getMeta, palByName } from './js/data.js';
 import { childOf } from './js/breeding.js';
 import { outcomeDistribution, popcount, choose, inheritCountDistribution, randomAddDistribution } from './js/probability.js';
-import { runSolver, checkPreflight, reachableSpeciesClosure, feasibleGenderAssignments, pairGenderInfo } from './js/solver.js';
+import { runSolver, checkPreflight, reachableSpeciesClosure, feasibleGenderAssignments, pairGenderInfo, dominates } from './js/solver.js';
 
 const ctx = {};
 
@@ -410,6 +410,51 @@ test('gender reversal guard: a single owned Pal cannot be bred with itself', () 
   });
 
   assertEqual(result.results.length, 0, 'a lone owned Pal has no partner to breed with, even with a Pal Reverser -- no route should be found');
+});
+
+test('dominance predicate: requires same species and gender, superset mask, no more junk or effort', () => {
+  const base = { species: 5, genderTag: 'ANY', mask: 0b0101, junk: 1, effort: 100 };
+  const better = { species: 5, genderTag: 'ANY', mask: 0b1101, junk: 0, effort: 80 };
+  assertEqual(dominates(better, base), true, 'superset mask, less junk, less effort should dominate');
+  assertEqual(dominates(base, better), false, 'domination is not symmetric here');
+  assertEqual(dominates({ ...better, species: 6 }, base), false, 'different species must never dominate');
+  assertEqual(dominates({ ...better, genderTag: 'M' }, base), false, 'different gender tag must never dominate');
+  assertEqual(dominates({ ...better, junk: 2 }, base), false, 'more junk must not dominate');
+  assertEqual(dominates({ ...better, effort: 200 }, base), false, 'more effort must not dominate');
+  assertEqual(dominates({ ...better, mask: 0b0100 }, base), false, 'a non-superset mask must not dominate');
+  assertEqual(dominates(base, base), true, 'a state trivially dominates itself');
+});
+
+test('dominance is sound: a dominating parent never lowers the odds of the desired result', () => {
+  // pruneDominated() discards states on the assumption that a parent with a
+  // superset of the desired passives and no more junk is at least as good for
+  // every co-parent. That is an assumption about the inheritance model, not
+  // just bookkeeping, so check it exhaustively rather than trusting it.
+  const fullMask = 0b1111;
+  const pFull = (mA, jA, mB, jB) => outcomeDistribution(mA, jA, mB, jB)
+    .filter(o => (o.mask & fullMask) === fullMask)
+    .reduce((acc, o) => acc + o.p, 0);
+
+  const states = [];
+  for (let mask = 0; mask < 16; mask++) {
+    for (let junk = 0; junk + popcount(mask) <= 4; junk++) states.push([mask, junk]);
+  }
+
+  let checked = 0;
+  for (const [mS, jS] of states) {
+    for (const [mT, jT] of states) {
+      // t dominates s on the passive axis
+      if ((mT & mS) !== mS || jT > jS) continue;
+      for (const [mB, jB] of states) {
+        const withS = pFull(mS, jS, mB, jB);
+        const withT = pFull(mT, jT, mB, jB);
+        assert(withT >= withS - 1e-12,
+          `dominating parent (${mT},${jT}) scored ${withT} vs (${mS},${jS}) at ${withS} against co-parent (${mB},${jB})`);
+        checked++;
+      }
+    }
+  }
+  assert(checked > 5000, `expected a broad sweep, only checked ${checked} combinations`);
 });
 
 const reportEl = document.getElementById('report');

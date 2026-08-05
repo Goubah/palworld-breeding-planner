@@ -53,6 +53,7 @@ self.onmessage = async (ev) => {
       maxSteps: p.maxSteps,
       timePerBreed: p.timePerBreed,
       maxResults: p.maxResults,
+      useDominance: p.useDominance !== false,
       onProgress: (round, size) => {
         if (cancelled) throw new CancelledError();
         self.postMessage({ type: 'progress', round, size });
