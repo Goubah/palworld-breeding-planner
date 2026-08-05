@@ -8,8 +8,10 @@ const FIELDS = [
     hint: 'How many breeding steps deep to search. Higher finds more routes but is slower.' },
   { key: 'timePerBreed', label: 'Minutes per breeding attempt', min: 1, max: 240, step: 1,
     hint: 'Used only to estimate route time. It never affects the probabilities themselves.' },
-  { key: 'beamWidth', label: 'Beam width (advanced)', min: 100, max: 20000, step: 100,
-    hint: 'Max candidate Pals kept per generation. Higher is more thorough but much slower. Raise it in steps (1000, then 3000) instead of jumping to the max.' },
+  // Storage key stays `beamWidth` so saved settings survive the rename. The
+  // label matches the wording the progress messages use.
+  { key: 'beamWidth', label: 'Search width (advanced)', min: 100, max: 20000, step: 100,
+    hint: 'Candidate Pals kept per generation. You should not need to touch this: if a search finds nothing it now widens and retries on its own. Raising it makes the search try harder from the start, which can turn up cheaper routes but takes noticeably longer.' },
   { key: 'maxResults', label: 'Number of routes to show', min: 1, max: 20, step: 1, hint: '' },
 ];
 
