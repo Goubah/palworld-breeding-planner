@@ -89,6 +89,15 @@ body {
 }
 .app-footer a { color: var(--accent); }
 .app-footer a:hover { color: var(--accent-strong); }
+/* Legal/attribution line sits quieter than the rest of the footer: it has to
+   be present and readable, but it isn't what a visitor came for. */
+.app-footer-legal {
+  border-top: 1px solid var(--border);
+  padding-top: 0.6rem;
+  font-size: 0.75rem;
+  opacity: 0.85;
+  line-height: 1.5;
+}
 
 .card {
   background: var(--bg-elevated);
