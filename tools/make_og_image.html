@@ -2,19 +2,21 @@
 <meta charset="utf-8">
 <title>OG image generator</title>
 <!--
-  Generates assets/og-cover.png (the social preview card) at 1200x630.
+  Generates assets/og-cover.jpg (the social preview card) at 1200x630.
 
-  Why a browser and not a Python script: there is no imaging library
-  installed on this machine, and text needs real font rendering. Canvas gives
-  us that plus gradients for free, and toDataURL() hands back a PNG.
+  Why a browser and not a Python script: there is no imaging library installed
+  on this machine, and text needs real font rendering. Canvas gives us that
+  plus gradients for free, and toBlob() hands back a JPEG.
 
-  Regenerate: serve the repo, open this page, click Download, and save the
-  result over assets/og-cover.png.
+  Regenerate: run `py tools/og_save_server.py <port>` (plain `py -m
+  http.server` has no POST handler), open this page, and click Save. Pass a
+  second argument to that script to write a preview somewhere harmless instead
+  of overwriting the live card.
 
-  The egg is drawn from scratch here. It is deliberately NOT a copy of any
-  Palworld egg asset -- this card is promotional and far more prominent than
-  the in-app Pal icons, so it uses original artwork. The palette is the app's
-  own passive-tier colors (World Tree purple, Rainbow cyan, gold).
+  The egg is drawn from scratch. It is deliberately NOT a copy of any Palworld
+  egg asset -- this card is promotional and far more prominent than the in-app
+  Pal icons, so it uses original artwork. The palette is the app's own
+  passive-tier colors (World Tree purple, Rainbow cyan, gold).
 -->
 <style>
   body { background:#1a1d24; color:#e6e8ee; font-family:"Segoe UI",system-ui,sans-serif; padding:20px; }
@@ -23,7 +25,7 @@
 </style>
 
 <canvas id="c" width="1200" height="630"></canvas>
-<button id="dl">Download og-cover.png</button>
+<button id="dl">Download og-cover.jpg</button>
 
 <script>
 const c = document.getElementById('c');
@@ -55,9 +57,9 @@ const EGG_X = 268, EGG_Y = 322, RX = 152, RY = 196;
 // An egg is a rounded narrow top over a rounded wider bottom. The shape hinges
 // entirely on the control points being HORIZONTAL from each pole: a control
 // point sharing its endpoint's y makes the curve leave/arrive horizontally,
-// which is what rounds the tip. Offsetting them diagonally instead (the first
-// attempt here) gives vertical tangents and yields a pointed leaf/lemon shape.
-// Top offset < bottom offset is what puts the widest point below centre.
+// which is what rounds the tip. Offsetting them diagonally instead gives
+// vertical tangents and yields a pointed leaf shape. Top offset < bottom
+// offset is what puts the widest point below centre.
 const CP_TOP = RX * 1.10;
 const CP_BOTTOM = RX * 1.62;
 function eggPath() {
@@ -68,84 +70,122 @@ function eggPath() {
   ctx.closePath();
 }
 
-// --- aura behind the egg --------------------------------------------------
-const aura = ctx.createRadialGradient(EGG_X, EGG_Y, 40, EGG_X, EGG_Y, 330);
-aura.addColorStop(0,    'rgba(92,241,226,0.20)');
-aura.addColorStop(0.45, 'rgba(163,116,240,0.11)');
+// --- ambient light --------------------------------------------------------
+// Soft and cool, just enough that the egg isn't floating on flat black. Not a
+// glow effect -- the shell is intact here.
+const aura = ctx.createRadialGradient(EGG_X, EGG_Y, 60, EGG_X, EGG_Y, 340);
+aura.addColorStop(0,    'rgba(92,241,226,0.10)');
+aura.addColorStop(0.45, 'rgba(163,116,240,0.07)');
 aura.addColorStop(1,    'rgba(163,116,240,0)');
 ctx.fillStyle = aura;
 ctx.fillRect(0, 0, W, H);
 
+// --- crack ----------------------------------------------------------------
+// Runs from the crown to roughly the midpoint. A hairline fracture in an
+// intact shell, so it is drawn as a dark fissure rather than lit from within.
+const crack = [
+  [EGG_X + 7,  EGG_Y - RY + 5],
+  [EGG_X - 13, EGG_Y - RY * 0.70],
+  [EGG_X + 12, EGG_Y - RY * 0.46],
+  [EGG_X - 11, EGG_Y - RY * 0.20],
+  [EGG_X + 6,  EGG_Y + RY * 0.03],
+];
+// Branches carry their own width so the twigs taper away from the main
+// fracture. Most bend at least once -- a dead-straight branch reads as a drawn
+// line rather than shell splitting along a stress path. Anything overshooting
+// the silhouette is fine: paintCrack runs inside the egg clip, so it just
+// reads as the fracture continuing around the curve.
+const branches = [
+  { w: 3.4, pts: [[EGG_X + 7,  EGG_Y - RY * 0.97], [EGG_X + 32, EGG_Y - RY * 0.88], [EGG_X + 44, EGG_Y - RY * 0.79]] },
+  { w: 3.2, pts: [[EGG_X - 13, EGG_Y - RY * 0.70], [EGG_X - 44, EGG_Y - RY * 0.75], [EGG_X - 62, EGG_Y - RY * 0.71]] },
+  { w: 3.4, pts: [[EGG_X + 12, EGG_Y - RY * 0.46], [EGG_X + 44, EGG_Y - RY * 0.51], [EGG_X + 66, EGG_Y - RY * 0.47]] },
+  { w: 3.2, pts: [[EGG_X - 11, EGG_Y - RY * 0.20], [EGG_X - 42, EGG_Y - RY * 0.15], [EGG_X - 60, EGG_Y - RY * 0.17]] },
+  { w: 3.0, pts: [[EGG_X + 6,  EGG_Y + RY * 0.03], [EGG_X + 28, EGG_Y + RY * 0.11], [EGG_X + 38, EGG_Y + RY * 0.20]] },
+  { w: 2.4, pts: [[EGG_X - 2,  EGG_Y - RY * 0.84], [EGG_X - 20, EGG_Y - RY * 0.87]] },
+  { w: 2.2, pts: [[EGG_X + 1,  EGG_Y - RY * 0.58], [EGG_X - 22, EGG_Y - RY * 0.55]] },
+  { w: 2.0, pts: [[EGG_X + 44, EGG_Y - RY * 0.51], [EGG_X + 50, EGG_Y - RY * 0.60]] },
+  { w: 2.0, pts: [[EGG_X - 42, EGG_Y - RY * 0.15], [EGG_X - 48, EGG_Y - RY * 0.05]] },
+  { w: 1.9, pts: [[EGG_X - 4,  EGG_Y - RY * 0.33], [EGG_X + 18, EGG_Y - RY * 0.30]] },
+];
+
+function strokePoly(pts, width, color, blur) {
+  ctx.beginPath();
+  ctx.moveTo(pts[0][0], pts[0][1]);
+  for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i][0], pts[i][1]);
+  ctx.strokeStyle = color;
+  ctx.lineWidth = width;
+  ctx.lineJoin = 'round';
+  ctx.lineCap = 'round';
+  if (blur) { ctx.shadowColor = 'rgba(16,20,30,0.6)'; ctx.shadowBlur = blur; }
+  ctx.stroke();
+  ctx.shadowBlur = 0;
+}
+
+function paintCrack() {
+  // Wide soft pass first for depth, then the tight dark line on top.
+  strokePoly(crack, 13, 'rgba(48,56,78,0.22)', 0);
+  strokePoly(crack, 5.6, 'rgba(30,36,52,0.95)', 8);
+  for (const b of branches) {
+    strokePoly(b.pts, b.w + 4, 'rgba(48,56,78,0.16)', 0);
+    strokePoly(b.pts, b.w, 'rgba(36,43,60,0.86)', 0);
+  }
+}
+
 // --- shell ----------------------------------------------------------------
+function paintShellBody() {
+  const shell = ctx.createLinearGradient(EGG_X - RX, EGG_Y - RY, EGG_X + RX * 0.7, EGG_Y + RY);
+  shell.addColorStop(0,    '#f2f5fb');
+  shell.addColorStop(0.42, '#d5dcea');
+  shell.addColorStop(0.75, '#9aa6bd');
+  shell.addColorStop(1,    '#6f7b93');
+  ctx.fillStyle = shell;
+  ctx.fillRect(EGG_X - RX, EGG_Y - RY, RX * 2, RY * 2);
+
+  // iridescent sheen, tying the shell to the app's tier palette
+  const sheen = ctx.createLinearGradient(EGG_X - RX, EGG_Y + RY, EGG_X + RX, EGG_Y - RY);
+  sheen.addColorStop(0,    'rgba(163,116,240,0.42)');
+  sheen.addColorStop(0.35, 'rgba(92,241,226,0.20)');
+  sheen.addColorStop(0.62, 'rgba(255,221,0,0.10)');
+  sheen.addColorStop(1,    'rgba(163,116,240,0.34)');
+  ctx.fillStyle = sheen;
+  ctx.fillRect(EGG_X - RX, EGG_Y - RY, RX * 2, RY * 2);
+
+  for (let i = 0; i < 130; i++) {
+    const a = rnd() * Math.PI * 2, r = Math.sqrt(rnd());
+    const px = EGG_X + Math.cos(a) * r * RX * 0.86;
+    const py = EGG_Y + Math.sin(a) * r * RY * 0.90;
+    const rad = 1.6 + rnd() * 5.2;
+    ctx.globalAlpha = 0.05 + rnd() * 0.16;
+    ctx.fillStyle = rnd() > 0.5 ? '#4a5570' : '#a374f0';
+    ctx.beginPath(); ctx.arc(px, py, rad, 0, Math.PI * 2); ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+
+  paintCrack();
+
+  const hi = ctx.createRadialGradient(EGG_X - 62, EGG_Y - 120, 8, EGG_X - 62, EGG_Y - 120, 132);
+  hi.addColorStop(0, 'rgba(255,255,255,0.42)');
+  hi.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = hi;
+  ctx.fillRect(EGG_X - RX, EGG_Y - RY, RX * 2, RY * 2);
+
+  const shade = ctx.createRadialGradient(EGG_X + 96, EGG_Y + 138, 10, EGG_X + 96, EGG_Y + 138, 210);
+  shade.addColorStop(0, 'rgba(11,14,20,0.42)');
+  shade.addColorStop(1, 'rgba(11,14,20,0)');
+  ctx.fillStyle = shade;
+  ctx.fillRect(EGG_X - RX, EGG_Y - RY, RX * 2, RY * 2);
+}
+
 ctx.save();
 eggPath();
 ctx.clip();
-
-const shell = ctx.createLinearGradient(EGG_X - RX, EGG_Y - RY, EGG_X + RX * 0.7, EGG_Y + RY);
-shell.addColorStop(0,    '#f2f5fb');
-shell.addColorStop(0.42, '#d5dcea');
-shell.addColorStop(0.75, '#9aa6bd');
-shell.addColorStop(1,    '#6f7b93');
-ctx.fillStyle = shell;
-ctx.fillRect(EGG_X - RX, EGG_Y - RY, RX * 2, RY * 2);
-
-// iridescent sheen -- the "mutated" read comes from this plus the glowing crack
-const sheen = ctx.createLinearGradient(EGG_X - RX, EGG_Y + RY, EGG_X + RX, EGG_Y - RY);
-sheen.addColorStop(0,    'rgba(163,116,240,0.42)');
-sheen.addColorStop(0.35, 'rgba(92,241,226,0.20)');
-sheen.addColorStop(0.62, 'rgba(255,221,0,0.10)');
-sheen.addColorStop(1,    'rgba(163,116,240,0.34)');
-ctx.fillStyle = sheen;
-ctx.fillRect(EGG_X - RX, EGG_Y - RY, RX * 2, RY * 2);
-
-// speckles
-for (let i = 0; i < 130; i++) {
-  const a = rnd() * Math.PI * 2, r = Math.sqrt(rnd());
-  const px = EGG_X + Math.cos(a) * r * RX * 0.86;
-  const py = EGG_Y + Math.sin(a) * r * RY * 0.90;
-  const rad = 1.6 + rnd() * 5.2;
-  ctx.globalAlpha = 0.05 + rnd() * 0.16;
-  ctx.fillStyle = rnd() > 0.5 ? '#4a5570' : '#a374f0';
-  ctx.beginPath(); ctx.arc(px, py, rad, 0, Math.PI * 2); ctx.fill();
-}
-ctx.globalAlpha = 1;
-
-// glowing crack
-const crack = [
-  [EGG_X - 74, EGG_Y - 138], [EGG_X - 34, EGG_Y - 74], [EGG_X - 62, EGG_Y - 30],
-  [EGG_X - 14, EGG_Y + 26],  [EGG_X - 44, EGG_Y + 78], [EGG_X + 4, EGG_Y + 132],
-];
-ctx.strokeStyle = '#eafffb';
-ctx.shadowColor = '#5cf1e2';
-ctx.shadowBlur = 34;
-ctx.lineWidth = 6.5;
-ctx.lineJoin = 'round'; ctx.lineCap = 'round';
-ctx.beginPath();
-ctx.moveTo(crack[0][0], crack[0][1]);
-for (let i = 1; i < crack.length; i++) ctx.lineTo(crack[i][0], crack[i][1]);
-ctx.stroke();
-ctx.lineWidth = 2.4; ctx.shadowBlur = 16; ctx.strokeStyle = '#ffffff';
-ctx.stroke();
-ctx.shadowBlur = 0;
-
-// highlight + contact shading
-const hi = ctx.createRadialGradient(EGG_X - 62, EGG_Y - 120, 8, EGG_X - 62, EGG_Y - 120, 132);
-hi.addColorStop(0, 'rgba(255,255,255,0.60)');
-hi.addColorStop(1, 'rgba(255,255,255,0)');
-ctx.fillStyle = hi;
-ctx.fillRect(EGG_X - RX, EGG_Y - RY, RX * 2, RY * 2);
-
-const shade = ctx.createRadialGradient(EGG_X + 96, EGG_Y + 138, 10, EGG_X + 96, EGG_Y + 138, 210);
-shade.addColorStop(0, 'rgba(11,14,20,0.42)');
-shade.addColorStop(1, 'rgba(11,14,20,0)');
-ctx.fillStyle = shade;
-ctx.fillRect(EGG_X - RX, EGG_Y - RY, RX * 2, RY * 2);
+paintShellBody();
 ctx.restore();
 
-// rim light
+// rim light -- cool and restrained, so the silhouette reads on the dark panel
 eggPath();
-ctx.strokeStyle = 'rgba(92,241,226,0.5)';
-ctx.lineWidth = 2.5;
+ctx.strokeStyle = 'rgba(140,190,205,0.34)';
+ctx.lineWidth = 2.2;
 ctx.stroke();
 
 // --- text -----------------------------------------------------------------
@@ -160,8 +200,8 @@ ctx.letterSpacing = '0px';
 
 ctx.fillStyle = '#f4f6fb';
 ctx.font = '700 62px "Segoe UI",system-ui,sans-serif';
-ctx.fillText('Breeding Route', TX, 272);
-ctx.fillText('Planner', TX, 340);
+ctx.fillText('Breeding the', TX, 272);
+ctx.fillText('perfect Pal', TX, 340);
 
 ctx.fillStyle = '#9aa0b0';
 ctx.font = '400 24px "Segoe UI",system-ui,sans-serif';
@@ -193,10 +233,9 @@ ctx.fillStyle = '#6d7488';
 ctx.font = '400 19px "Segoe UI",system-ui,sans-serif';
 ctx.fillText('goubah.github.io/palworld-breeding-planner', TX, 552);
 
-// JPEG, not PNG: the gradients and speckles make this image compress terribly
-// as PNG (~640KB, too heavy for a social card that should stay well under
-// 300KB). There's no transparency to preserve, so JPEG at q=0.92 is the right
-// trade -- roughly a fifth the size with no visible difference at card scale.
+// JPEG, not PNG: the gradients and speckles make this compress terribly as
+// PNG (~640KB, too heavy for a social card that should stay under 300KB).
+// There's no transparency to preserve, so JPEG at q=0.92 is the right trade.
 window.__jpeg = (q = 0.92) => c.toDataURL('image/jpeg', q);
 
 // Posts the rendered card straight to disk. Requires tools/og_save_server.py
