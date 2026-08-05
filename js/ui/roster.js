@@ -3,7 +3,7 @@
 
 import { getPassives, palByInternal, passiveByInternal } from '../data.js';
 import * as store from '../store.js';
-import { createSpeciesPicker, createPassivePicker, renderPalIcon, renderPassiveChip, plural } from './shared.js';
+import { createSpeciesPicker, createPassivePicker, renderPalIcon, renderPassiveChip, plural, paldeckOrder } from './shared.js';
 
 export function initRosterTab(container) {
   container.innerHTML = '';
@@ -267,6 +267,7 @@ export function initRosterTab(container) {
   const sortSelect = document.createElement('select');
   sortSelect.className = 'roster-sort';
   for (const [value, label] of [
+    ['dex', 'Paldeck order'],
     ['added', 'Recently added'],
     ['name', 'Name (A-Z)'],
     ['passives', 'Most passives'],
@@ -318,7 +319,9 @@ export function initRosterTab(container) {
       .filter(x => x.species && matchesFilter(x.pal, x.species, needle));
 
     const sortBy = sortSelect.value;
-    if (sortBy === 'name') {
+    if (sortBy === 'dex') {
+      shown.sort((a, b) => paldeckOrder(a.species, b.species));
+    } else if (sortBy === 'name') {
       shown.sort((a, b) => a.species.name.localeCompare(b.species.name));
     } else if (sortBy === 'passives') {
       const count = x => (Array.isArray(x.pal.passiveInternalNames) ? x.pal.passiveInternalNames.length : 0);

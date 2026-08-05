@@ -165,8 +165,23 @@ export function renderPassiveChip(passive) {
   return chip;
 }
 
+/**
+ * Paldeck order: by dex number, with a variant placed immediately after the
+ * base form it shares a number with (the game shows those as 5 and 5B). The
+ * eleven Terraria collab Pals carry dex numbers in the 10000s and so fall at
+ * the end, which is where the Paldeck lists them too.
+ *
+ * Sorting is display-only. Nothing here is persisted, and the stored roster
+ * references species by internalName, so ordering cannot affect saved data.
+ */
+export function paldeckOrder(a, b) {
+  return a.dex - b.dex
+    || (a.isVariant === b.isVariant ? 0 : (a.isVariant ? 1 : -1))
+    || a.name.localeCompare(b.name);
+}
+
 export function createSpeciesPicker(onChange) {
-  const pals = getPals();
+  const pals = [...getPals()].sort(paldeckOrder);
   return createSearchPicker({
     items: pals,
     getId: p => p.internalName,
