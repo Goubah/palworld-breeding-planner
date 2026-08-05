@@ -1,0 +1,220 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>OG image generator</title>
+<!--
+  Generates assets/og-cover.png (the social preview card) at 1200x630.
+
+  Why a browser and not a Python script: there is no imaging library
+  installed on this machine, and text needs real font rendering. Canvas gives
+  us that plus gradients for free, and toDataURL() hands back a PNG.
+
+  Regenerate: serve the repo, open this page, click Download, and save the
+  result over assets/og-cover.png.
+
+  The egg is drawn from scratch here. It is deliberately NOT a copy of any
+  Palworld egg asset -- this card is promotional and far more prominent than
+  the in-app Pal icons, so it uses original artwork. The palette is the app's
+  own passive-tier colors (World Tree purple, Rainbow cyan, gold).
+-->
+<style>
+  body { background:#1a1d24; color:#e6e8ee; font-family:"Segoe UI",system-ui,sans-serif; padding:20px; }
+  canvas { border:1px solid #333; max-width:100%; height:auto; display:block; margin-bottom:12px; }
+  button { padding:8px 16px; font-size:15px; cursor:pointer; }
+</style>
+
+<canvas id="c" width="1200" height="630"></canvas>
+<button id="dl">Download og-cover.png</button>
+
+<script>
+const c = document.getElementById('c');
+const ctx = c.getContext('2d');
+const W = 1200, H = 630;
+
+// Deterministic PRNG so the speckle pattern is identical on every regenerate.
+let _s = 20260804;
+function rnd() {
+  _s ^= _s << 13; _s ^= _s >>> 17; _s ^= _s << 5; _s |= 0;
+  return ((_s >>> 0) % 100000) / 100000;
+}
+
+// --- background -----------------------------------------------------------
+const bg = ctx.createLinearGradient(0, 0, W * 0.4, H);
+bg.addColorStop(0, '#0b0e14');
+bg.addColorStop(1, '#161b26');
+ctx.fillStyle = bg;
+ctx.fillRect(0, 0, W, H);
+
+// faint grid, echoes the app's card borders without competing for attention
+ctx.strokeStyle = 'rgba(255,255,255,0.022)';
+ctx.lineWidth = 1;
+for (let x = 0; x < W; x += 40) { ctx.beginPath(); ctx.moveTo(x + .5, 0); ctx.lineTo(x + .5, H); ctx.stroke(); }
+for (let y = 0; y < H; y += 40) { ctx.beginPath(); ctx.moveTo(0, y + .5); ctx.lineTo(W, y + .5); ctx.stroke(); }
+
+const EGG_X = 268, EGG_Y = 322, RX = 152, RY = 196;
+
+// An egg is a rounded narrow top over a rounded wider bottom. The shape hinges
+// entirely on the control points being HORIZONTAL from each pole: a control
+// point sharing its endpoint's y makes the curve leave/arrive horizontally,
+// which is what rounds the tip. Offsetting them diagonally instead (the first
+// attempt here) gives vertical tangents and yields a pointed leaf/lemon shape.
+// Top offset < bottom offset is what puts the widest point below centre.
+const CP_TOP = RX * 1.10;
+const CP_BOTTOM = RX * 1.62;
+function eggPath() {
+  ctx.beginPath();
+  ctx.moveTo(EGG_X, EGG_Y - RY);
+  ctx.bezierCurveTo(EGG_X + CP_TOP, EGG_Y - RY, EGG_X + CP_BOTTOM, EGG_Y + RY, EGG_X, EGG_Y + RY);
+  ctx.bezierCurveTo(EGG_X - CP_BOTTOM, EGG_Y + RY, EGG_X - CP_TOP, EGG_Y - RY, EGG_X, EGG_Y - RY);
+  ctx.closePath();
+}
+
+// --- aura behind the egg --------------------------------------------------
+const aura = ctx.createRadialGradient(EGG_X, EGG_Y, 40, EGG_X, EGG_Y, 330);
+aura.addColorStop(0,    'rgba(92,241,226,0.20)');
+aura.addColorStop(0.45, 'rgba(163,116,240,0.11)');
+aura.addColorStop(1,    'rgba(163,116,240,0)');
+ctx.fillStyle = aura;
+ctx.fillRect(0, 0, W, H);
+
+// --- shell ----------------------------------------------------------------
+ctx.save();
+eggPath();
+ctx.clip();
+
+const shell = ctx.createLinearGradient(EGG_X - RX, EGG_Y - RY, EGG_X + RX * 0.7, EGG_Y + RY);
+shell.addColorStop(0,    '#f2f5fb');
+shell.addColorStop(0.42, '#d5dcea');
+shell.addColorStop(0.75, '#9aa6bd');
+shell.addColorStop(1,    '#6f7b93');
+ctx.fillStyle = shell;
+ctx.fillRect(EGG_X - RX, EGG_Y - RY, RX * 2, RY * 2);
+
+// iridescent sheen -- the "mutated" read comes from this plus the glowing crack
+const sheen = ctx.createLinearGradient(EGG_X - RX, EGG_Y + RY, EGG_X + RX, EGG_Y - RY);
+sheen.addColorStop(0,    'rgba(163,116,240,0.42)');
+sheen.addColorStop(0.35, 'rgba(92,241,226,0.20)');
+sheen.addColorStop(0.62, 'rgba(255,221,0,0.10)');
+sheen.addColorStop(1,    'rgba(163,116,240,0.34)');
+ctx.fillStyle = sheen;
+ctx.fillRect(EGG_X - RX, EGG_Y - RY, RX * 2, RY * 2);
+
+// speckles
+for (let i = 0; i < 130; i++) {
+  const a = rnd() * Math.PI * 2, r = Math.sqrt(rnd());
+  const px = EGG_X + Math.cos(a) * r * RX * 0.86;
+  const py = EGG_Y + Math.sin(a) * r * RY * 0.90;
+  const rad = 1.6 + rnd() * 5.2;
+  ctx.globalAlpha = 0.05 + rnd() * 0.16;
+  ctx.fillStyle = rnd() > 0.5 ? '#4a5570' : '#a374f0';
+  ctx.beginPath(); ctx.arc(px, py, rad, 0, Math.PI * 2); ctx.fill();
+}
+ctx.globalAlpha = 1;
+
+// glowing crack
+const crack = [
+  [EGG_X - 74, EGG_Y - 138], [EGG_X - 34, EGG_Y - 74], [EGG_X - 62, EGG_Y - 30],
+  [EGG_X - 14, EGG_Y + 26],  [EGG_X - 44, EGG_Y + 78], [EGG_X + 4, EGG_Y + 132],
+];
+ctx.strokeStyle = '#eafffb';
+ctx.shadowColor = '#5cf1e2';
+ctx.shadowBlur = 34;
+ctx.lineWidth = 6.5;
+ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+ctx.beginPath();
+ctx.moveTo(crack[0][0], crack[0][1]);
+for (let i = 1; i < crack.length; i++) ctx.lineTo(crack[i][0], crack[i][1]);
+ctx.stroke();
+ctx.lineWidth = 2.4; ctx.shadowBlur = 16; ctx.strokeStyle = '#ffffff';
+ctx.stroke();
+ctx.shadowBlur = 0;
+
+// highlight + contact shading
+const hi = ctx.createRadialGradient(EGG_X - 62, EGG_Y - 120, 8, EGG_X - 62, EGG_Y - 120, 132);
+hi.addColorStop(0, 'rgba(255,255,255,0.60)');
+hi.addColorStop(1, 'rgba(255,255,255,0)');
+ctx.fillStyle = hi;
+ctx.fillRect(EGG_X - RX, EGG_Y - RY, RX * 2, RY * 2);
+
+const shade = ctx.createRadialGradient(EGG_X + 96, EGG_Y + 138, 10, EGG_X + 96, EGG_Y + 138, 210);
+shade.addColorStop(0, 'rgba(11,14,20,0.42)');
+shade.addColorStop(1, 'rgba(11,14,20,0)');
+ctx.fillStyle = shade;
+ctx.fillRect(EGG_X - RX, EGG_Y - RY, RX * 2, RY * 2);
+ctx.restore();
+
+// rim light
+eggPath();
+ctx.strokeStyle = 'rgba(92,241,226,0.5)';
+ctx.lineWidth = 2.5;
+ctx.stroke();
+
+// --- text -----------------------------------------------------------------
+const TX = 512;
+ctx.textBaseline = 'alphabetic';
+
+ctx.fillStyle = '#5cf1e2';
+ctx.font = '600 21px "Segoe UI",system-ui,sans-serif';
+ctx.letterSpacing = '2.4px';
+ctx.fillText('PALWORLD BREEDING CALCULATOR', TX, 196);
+ctx.letterSpacing = '0px';
+
+ctx.fillStyle = '#f4f6fb';
+ctx.font = '700 62px "Segoe UI",system-ui,sans-serif';
+ctx.fillText('Breeding Route', TX, 272);
+ctx.fillText('Planner', TX, 340);
+
+ctx.fillStyle = '#9aa0b0';
+ctx.font = '400 24px "Segoe UI",system-ui,sans-serif';
+ctx.fillText('Plan multi-generation routes from the Pals', TX, 392);
+ctx.fillText('you already own — passive skills included.', TX, 426);
+
+// tier-colored pills, same palette as the passive chips in the app
+const pills = [
+  { t: 'Legend',      bd: '#5cf1e2', fg: '#8ff5e8', bg: 'rgba(22,48,44,0.92)' },
+  { t: 'Lucky',       bd: '#5cf1e2', fg: '#8ff5e8', bg: 'rgba(22,48,44,0.92)' },
+  { t: 'Workaholic',  bd: '#ffdd00', fg: '#f2d76b', bg: 'rgba(46,42,18,0.92)' },
+];
+let px = TX;
+ctx.font = '600 19px "Segoe UI",system-ui,sans-serif';
+for (const p of pills) {
+  const w = ctx.measureText(p.t).width + 30;
+  ctx.fillStyle = p.bg;
+  ctx.strokeStyle = p.bd;
+  ctx.lineWidth = 1.6;
+  ctx.beginPath();
+  ctx.roundRect(px, 466, w, 38, 19);
+  ctx.fill(); ctx.stroke();
+  ctx.fillStyle = p.fg;
+  ctx.fillText(p.t, px + 15, 491);
+  px += w + 12;
+}
+
+ctx.fillStyle = '#6d7488';
+ctx.font = '400 19px "Segoe UI",system-ui,sans-serif';
+ctx.fillText('goubah.github.io/palworld-breeding-planner', TX, 552);
+
+// JPEG, not PNG: the gradients and speckles make this image compress terribly
+// as PNG (~640KB, too heavy for a social card that should stay well under
+// 300KB). There's no transparency to preserve, so JPEG at q=0.92 is the right
+// trade -- roughly a fifth the size with no visible difference at card scale.
+window.__jpeg = (q = 0.92) => c.toDataURL('image/jpeg', q);
+
+// Posts the rendered card straight to disk. Requires tools/og_save_server.py
+// to be the server (plain `py -m http.server` has no POST handler).
+window.__save = () => new Promise((resolve, reject) => {
+  c.toBlob(
+    (blob) => fetch('/save-og', { method: 'POST', body: blob })
+      .then(r => r.text().then(t => (r.ok ? resolve(t) : reject(new Error(t)))))
+      .catch(reject),
+    'image/jpeg',
+    0.92
+  );
+});
+
+document.getElementById('dl').addEventListener('click', () => {
+  const a = document.createElement('a');
+  a.download = 'og-cover.jpg';
+  a.href = c.toDataURL('image/jpeg', 0.92);
+  a.click();
+});
+</script>
