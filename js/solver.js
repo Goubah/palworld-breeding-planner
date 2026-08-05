@@ -559,8 +559,14 @@ export function runSolver({
       }
     }
 
+    // Recount after pruning. `liveCount` above is the pre-prune figure needed
+    // to decide whether the beam runs at all; reporting that number would
+    // overstate the frontier, since it includes everything just discarded.
+    let liveAfterPrune = 0;
+    for (const s of allStates.values()) if (!s.dominated) liveAfterPrune++;
+
     frontierNew = Array.from(updatedOrNew);
-    if (onProgress) onProgress(round, liveCount);
+    if (onProgress) onProgress(round, liveAfterPrune);
   }
 
   // Different (mask, junk) outcomes from the exact same pair of parents
