@@ -398,6 +398,13 @@ export function runSolver({
 
     const updatedOrNew = new Set();
 
+    // Only the round that hits maxSteps is genuinely last. If the frontier
+    // empties earlier the loop stops too, but that isn't knowable in advance,
+    // and guessing wrong here would silently discard states a later round
+    // still needed. Treating only the maxSteps round as final is the safe
+    // reading: at worst the optimisation just doesn't fire.
+    const isFinalRound = round === maxSteps;
+
     const emitChild = (keyA, keyB, a, b, childSpecies, genderP, reversalSide = null) => {
       const outcomes = cachedOutcomeDistribution(a.mask, a.junk, b.mask, b.junk);
       for (const outcome of outcomes) {
@@ -441,15 +448,24 @@ export function runSolver({
       // Reverser, which only flips a gender, not a Pal into a duplicate.
       if (keyA === keyB && a.origin === 'owned' && a.ownedRefs.length < 2) return;
 
+      // Nothing bred on the final round can be used as a parent afterwards,
+      // so the only pairs worth evaluating then are the ones that can produce
+      // the goal itself. A child's desired-passive mask is always a subset of
+      // its parents' union (outcomeDistribution draws subsets of mask1|mask2,
+      // and random additions only ever add junk), so a pair whose union
+      // doesn't already cover every desired passive cannot possibly finish.
+      if (isFinalRound && (a.mask | b.mask) !== fullMask) return;
+
       if (!specialPairs.has(specialPairKey(a.species, b.species))) {
         // The overwhelming majority of pairs: child species doesn't depend
         // on gender, so a gender-agnostic lookup is always valid, and
         // pairGenderInfo alone captures the full gender cost/feasibility
         // (including whether a Pal Reverser is needed on one side).
-        const { p: genderP, reversalSide } = pairGenderInfo(a, b, maleProbOf);
-        if (genderP <= 0) return;
         const childSpecies = childOf(a.species, null, b.species, null);
         if (childSpecies === null) return;
+        if (isFinalRound && childSpecies !== targetSpeciesIdx) return;
+        const { p: genderP, reversalSide } = pairGenderInfo(a, b, maleProbOf);
+        if (genderP <= 0) return;
         emitChild(keyA, keyB, a, b, childSpecies, genderP, reversalSide);
         return;
       }
@@ -464,6 +480,7 @@ export function runSolver({
       for (const asg of feasibleGenderAssignments(a, b, maleProbOf)) {
         const childSpecies = childOf(a.species, asg.aGender, b.species, asg.bGender);
         if (childSpecies === null) continue;
+        if (isFinalRound && childSpecies !== targetSpeciesIdx) continue;
         emitChild(keyA, keyB, a, b, childSpecies, asg.p);
       }
     };

@@ -457,6 +457,30 @@ test('dominance is sound: a dominating parent never lowers the odds of the desir
   assert(checked > 5000, `expected a broad sweep, only checked ${checked} combinations`);
 });
 
+test('outcome invariant: a child mask is always a subset of the parents\' union', () => {
+  // The final-round pruning in the solver skips any pair whose combined mask
+  // doesn't already cover every desired passive, on the grounds that breeding
+  // can never introduce a desired passive neither parent had. If random
+  // additions could ever supply one, that pruning would silently drop valid
+  // routes, so pin the invariant here rather than in a comment.
+  const states = [];
+  for (let mask = 0; mask < 16; mask++) {
+    for (let junk = 0; junk + popcount(mask) <= 4; junk++) states.push([mask, junk]);
+  }
+  let checked = 0;
+  for (const [m1, j1] of states) {
+    for (const [m2, j2] of states) {
+      const union = m1 | m2;
+      for (const o of outcomeDistribution(m1, j1, m2, j2)) {
+        assertEqual(o.mask & ~union, 0,
+          `child mask ${o.mask} escaped parents' union ${union} for (${m1},${j1})+(${m2},${j2})`);
+        checked++;
+      }
+    }
+  }
+  assert(checked > 5000, `expected a broad sweep, only checked ${checked} outcomes`);
+});
+
 const reportEl = document.getElementById('report');
 runAll(reportEl).then(({ pass, fail }) => {
   document.title = `${fail === 0 ? 'PASS' : 'FAIL'} (${pass}/${pass + fail}) - Tests`;
