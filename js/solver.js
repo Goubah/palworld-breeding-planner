@@ -36,6 +36,12 @@ export const DEFAULTS = {
   beamWidth: 1000,
   maxSteps: 6, // matches the Advanced Settings ceiling -- see settings.js
   timePerBreed: 5, // minutes per breeding attempt (egg + incubation); user-configurable
+  // Effort charged for a pairing that needs a Pal Reverser, in the same
+  // minutes unit as timePerBreed. The item is a rare drop or a slow currency
+  // purchase, so 60 (twelve breeding attempts at the default 5 min) prices it
+  // as a real but not prohibitive cost: a Reverser route now has to be
+  // meaningfully better to win, rather than winning ties by accident.
+  reverserPenalty: 60,
   maxResults: 5,
 };
 
@@ -359,6 +365,7 @@ export function runSolver({
   maxSteps = DEFAULTS.maxSteps,
   timePerBreed = DEFAULTS.timePerBreed,
   maxResults = DEFAULTS.maxResults,
+  reverserPenalty = DEFAULTS.reverserPenalty,
   onProgress = null,
   useDominance = true, // exposed so benchmarks can A/B it on an identical roster
 }) {
@@ -416,7 +423,18 @@ export function runSolver({
         if (successProb <= 0) continue;
         const attempts = 1 / successProb;
         const timeCost = attempts * timePerBreed;
-        const childEffort = a.effort + b.effort + timeCost;
+        // A Pal Reverser is not free. It is a rare drop or a purchase in a
+        // currency that accumulates slowly, so a pairing that needs one is
+        // genuinely worse than an equivalent pairing that doesn't.
+        //
+        // Pricing it at zero was a real bug, not just an omission: a
+        // same-gender pair and a natural male/female pair both scored
+        // probability 1, so their efforts tied exactly, and ties are broken by
+        // a strict `<` comparison. Whichever the search happened to reach
+        // first won permanently, meaning a Reverser route could displace an
+        // identical one that needed no item, purely by discovery order.
+        const reverserCost = reversalSide ? reverserPenalty : 0;
+        const childEffort = a.effort + b.effort + timeCost + reverserCost;
 
         const childDepth = Math.max(a.depth, b.depth) + 1;
         const childKey = stateKey(childSpecies, outcome.mask, outcome.junk, 'ANY');

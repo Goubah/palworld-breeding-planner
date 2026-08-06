@@ -481,6 +481,50 @@ test('outcome invariant: a child mask is always a subset of the parents\' union'
   assert(checked > 5000, `expected a broad sweep, only checked ${checked} outcomes`);
 });
 
+test('a Pal Reverser route never wins a tie against one that needs no item', () => {
+  // A same-gender pairing and a natural male/female pairing both score
+  // probability 1, so their efforts tie exactly, and ties are settled by a
+  // strict < comparison. With no cost on the item, whichever the search
+  // reached first won permanently, so a Reverser route could displace an
+  // identical one needing no item purely by discovery order.
+  const lamball = palByName('Lamball');
+  const legend = ctx.passives.find(p => p.name === 'Legend');
+  const lucky = ctx.passives.find(p => p.name === 'Lucky');
+  assert(lamball && legend && lucky, 'fixture pal/passives must exist');
+
+  // Two males (a Reverser is required) plus a female alternative (none is).
+  // Both pairings yield a Lamball carrying Legend and Lucky.
+  const ownedPals = [
+    { speciesIdx: lamball.i, gender: 'MALE',   passiveInternalNames: [legend.internalName] },
+    { speciesIdx: lamball.i, gender: 'MALE',   passiveInternalNames: [lucky.internalName] },
+    { speciesIdx: lamball.i, gender: 'FEMALE', passiveInternalNames: [lucky.internalName] },
+  ];
+  const usesReverser = (node) => node.type === 'owned'
+    ? !!node.needsReversal
+    : (!!node.needsReversal || usesReverser(node.parentA) || usesReverser(node.parentB));
+
+  const run = (reverserPenalty) => runSolver({
+    ownedPals,
+    targetSpeciesIdx: lamball.i,
+    desiredPassiveNames: [legend.internalName, lucky.internalName],
+    maleProbOf: (i) => ctx.pals[i].maleProb,
+    genderRules: ctx.meta.genderSpecificRules,
+    maxSteps: 2,
+    reverserPenalty,
+  });
+
+  const priced = run(60);
+  assert(priced.results.length > 0, 'expected a route with the penalty applied');
+  assertEqual(usesReverser(priced.results[0]), false,
+    'with the item priced, the pairing needing no Reverser must win');
+
+  // Guard the guard: if the fixture stopped offering a Reverser route at all,
+  // the assertion above would pass for the wrong reason.
+  const free = run(0);
+  assertEqual(usesReverser(free.results[0]), true,
+    'fixture must still offer a Reverser route when the item is free, or this test proves nothing');
+});
+
 const reportEl = document.getElementById('report');
 runAll(reportEl).then(({ pass, fail }) => {
   document.title = `${fail === 0 ? 'PASS' : 'FAIL'} (${pass}/${pass + fail}) - Tests`;
