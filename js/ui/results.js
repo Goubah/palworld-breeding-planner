@@ -127,6 +127,18 @@ function renderResults(result, request, meta = {}) {
     const genLabel = `${route.depth} generation${route.depth === 1 ? '' : 's'}`;
     heading.textContent = `Route ${idx + 1} — ${genLabel}, est. ${formatEffort(route.effort)}`;
     card.appendChild(heading);
+
+    // Routes that need a Pal Reverser and routes that don't are kept as
+    // separate results, so say which this is up front. The time estimate
+    // alone can't carry the decision: farming the item is active play, while
+    // the extra eggs an item-free route costs get batched and hatched
+    // together, and some players would rather bank a scarce item regardless.
+    const reverserTag = document.createElement('div');
+    reverserTag.className = 'route-reverser-tag ' + (route.usesReverser ? 'needs' : 'free');
+    reverserTag.textContent = route.usesReverser
+      ? '⇄ Uses a Pal Reverser'
+      : 'No Pal Reverser needed';
+    card.appendChild(reverserTag);
     const scrollWrap = document.createElement('div');
     scrollWrap.className = 'route-tree-scroll';
     scrollWrap.appendChild(renderRouteNode(route, request.desiredPassives));

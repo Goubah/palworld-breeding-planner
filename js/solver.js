@@ -77,8 +77,21 @@ export function ownedPalToState(pal, desiredIndex) {
 
 function popcountMask(m) { let c = 0; while (m) { m &= m - 1; c++; } return c; }
 
-export function stateKey(species, mask, junk, genderTag) {
-  return `${species},${mask},${junk},${genderTag}`;
+/**
+ * `usesReverser` is part of a state's identity, not just a label, so a route
+ * that needs a Pal Reverser and one that doesn't are kept as separate states
+ * and can both be returned.
+ *
+ * It's deliberately not folded into the effort number. Farming a Reverser is
+ * an active interruption, whereas the extra breeding attempts an item-free
+ * route costs are passive: players batch up 10-20 eggs and hatch them
+ * together. Those are not the same kind of minute, and the cost model treats
+ * all minutes as fungible, so it cannot express that preference. Nor can it
+ * express wanting to bank a scarce item for later. When the model can't
+ * represent the tradeoff, the user should get both options and decide.
+ */
+export function stateKey(species, mask, junk, genderTag, usesReverser) {
+  return `${species},${mask},${junk},${genderTag},${usesReverser ? 'R' : '-'}`;
 }
 
 /**
@@ -302,6 +315,10 @@ function protectAncestors(keep, allStates) {
 function dominates(t, s) {
   return t.species === s.species
     && t.genderTag === s.genderTag
+    // Must match on Reverser use too, or the cheaper variant would dominate
+    // the other and silently collapse the very distinction that keeping both
+    // is meant to preserve.
+    && t.usesReverser === s.usesReverser
     && (t.mask & s.mask) === s.mask   // t carries every desired passive s has
     && t.junk <= s.junk
     && t.effort <= s.effort;
@@ -394,13 +411,14 @@ export function runSolver({
 
   ownedPals.forEach((pal, idx) => {
     const s = ownedPalToState(pal, desiredIndex);
-    const key = stateKey(s.species, s.mask, s.junk, s.genderTag);
+    const key = stateKey(s.species, s.mask, s.junk, s.genderTag, false);
     const existing = allStates.get(key);
     if (existing) {
       existing.ownedRefs.push(idx);
     } else {
       allStates.set(key, {
         key, species: s.species, mask: s.mask, junk: s.junk, genderTag: s.genderTag,
+        usesReverser: false,
         effort: 0, depth: 0, origin: 'owned', ownedRefs: [idx],
         parentAKey: null, parentBKey: null, p: null, attempts: null,
       });
@@ -445,11 +463,13 @@ export function runSolver({
         const childEffort = a.effort + b.effort + timeCost + reverserCost;
 
         const childDepth = Math.max(a.depth, b.depth) + 1;
-        const childKey = stateKey(childSpecies, outcome.mask, outcome.junk, 'ANY');
+        const childUsesReverser = a.usesReverser || b.usesReverser || !!reversalSide;
+        const childKey = stateKey(childSpecies, outcome.mask, outcome.junk, 'ANY', childUsesReverser);
         const existing = allStates.get(childKey);
         if (!existing || childEffort < existing.effort) {
           allStates.set(childKey, {
             key: childKey, species: childSpecies, mask: outcome.mask, junk: outcome.junk, genderTag: 'ANY',
+            usesReverser: childUsesReverser,
             effort: childEffort, depth: childDepth, origin: 'bred',
             parentAKey: keyA, parentBKey: keyB, p: successProb, attempts, reversalSide,
             ownedRefs: [],
@@ -685,6 +705,7 @@ function reconstructRoute(state, allStates) {
     return {
       type: 'owned', species: state.species, mask: state.mask, junk: state.junk,
       genderTag: state.genderTag, ownedRefs: state.ownedRefs, effort: state.effort, depth: 0,
+      usesReverser: state.usesReverser,
     };
   }
   const a = reconstructRoute(allStates.get(state.parentAKey), allStates);
@@ -696,6 +717,7 @@ function reconstructRoute(state, allStates) {
   return {
     type: 'bred', species: state.species, mask: state.mask, junk: state.junk,
     effort: state.effort, depth: state.depth, p: state.p, attempts: state.attempts,
+    usesReverser: state.usesReverser,
     parentA: a,
     parentB: b,
   };
