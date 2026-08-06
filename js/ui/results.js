@@ -31,6 +31,16 @@ export function initResultsTab(container) {
   statusEl.className = 'results-status';
   statusEl.textContent = 'Pick a target Pal above, then click "Find Breeding Routes".';
   header.appendChild(statusEl);
+
+  // Standing explanation of what the search returns. The solver produces at
+  // most two results, split by whether the plan needs a Pal Reverser, so say
+  // that plainly rather than leaving people to wonder why a list of five
+  // never appears.
+  const scopeEl = document.createElement('p');
+  scopeEl.className = 'results-scope muted';
+  scopeEl.textContent = 'The search returns the fastest route it can find in two forms: one that needs a Pal Reverser and one that does not. Both use only the Pals in your roster.';
+  header.appendChild(scopeEl);
+
   cancelBtn = document.createElement('button');
   cancelBtn.className = 'btn btn-secondary';
   cancelBtn.textContent = 'Cancel Search';
@@ -96,7 +106,6 @@ export function runSearch({ targetSpecies, desiredPassives }) {
       beamWidth: settings.beamWidth,
       maxSteps: settings.maxSteps,
       timePerBreed: settings.timePerBreed,
-      maxResults: settings.maxResults,
     },
   });
 }

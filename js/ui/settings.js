@@ -12,7 +12,6 @@ const FIELDS = [
   // label matches the wording the progress messages use.
   { key: 'beamWidth', label: 'Search width (advanced)', min: 100, max: 20000, step: 100,
     hint: 'Candidate Pals kept per generation. You should not need to touch this: if a search finds nothing it now widens and retries on its own. Raising it makes the search try harder from the start, which can turn up cheaper routes but takes noticeably longer.' },
-  { key: 'maxResults', label: 'Number of routes to show', min: 1, max: 20, step: 1, hint: '' },
 ];
 
 export function initSettingsTab(container) {
