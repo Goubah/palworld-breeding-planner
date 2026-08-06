@@ -37,11 +37,19 @@ export const DEFAULTS = {
   maxSteps: 6, // matches the Advanced Settings ceiling -- see settings.js
   timePerBreed: 5, // minutes per breeding attempt (egg + incubation); user-configurable
   // Effort charged for a pairing that needs a Pal Reverser, in the same
-  // minutes unit as timePerBreed. The item is a rare drop or a slow currency
-  // purchase, so 60 (twelve breeding attempts at the default 5 min) prices it
-  // as a real but not prohibitive cost: a Reverser route now has to be
-  // meaningfully better to win, rather than winning ties by accident.
-  reverserPenalty: 60,
+  // minutes unit as timePerBreed. Derived from how the item is actually
+  // farmed: roughly 10-15 seconds to reach a spawn and interact, with about
+  // one Reverser per ten interactions, so ~125 seconds. 2.5 minutes rounds
+  // that up slightly, since one-in-ten is an average and the drop is random.
+  //
+  // The exact figure matters less than it being above zero. A same-gender
+  // pairing and a natural one both score probability 1, so without a penalty
+  // their efforts tie and the winner is decided by whichever the search
+  // reached first. A small cost settles ties toward needing no item, while
+  // still letting a Reverser route win when it genuinely saves real time.
+  // An earlier guess of 60 was about thirty times too punitive and would
+  // have suppressed routes that are actually the better plan.
+  reverserPenalty: 2.5,
   maxResults: 5,
 };
 
