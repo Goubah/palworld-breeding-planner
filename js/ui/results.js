@@ -38,7 +38,7 @@ export function initResultsTab(container) {
   // never appears.
   const scopeEl = document.createElement('p');
   scopeEl.className = 'results-scope muted';
-  scopeEl.textContent = 'The search returns the fastest route it can find in two forms: one that needs a Pal Reverser and one that does not. Both use only the Pals in your roster.';
+  scopeEl.textContent = 'The search returns the fastest routes it can find, including one that needs a Pal Reverser and one that does not, where both exist. All of them use only the Pals in your roster.';
   header.appendChild(scopeEl);
 
   cancelBtn = document.createElement('button');
