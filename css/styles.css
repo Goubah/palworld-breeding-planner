@@ -554,6 +554,8 @@ body {
 .route-step-operand-note.reverser { color: var(--warn); }
 .route-step-connector { color: var(--text-muted); }
 .route-step-cost { font-size: 0.78rem; color: var(--text-muted); margin-top: 0.35rem; }
+/* Reads as a continuation of the egg count above it, not a peer of it. */
+.route-step-gender { margin-top: 0.15rem; }
 .route-step-why { font-size: 0.78rem; color: #f2d76b; margin-top: 0.2rem; max-width: 70ch; line-height: 1.45; }
 
 .loading-overlay {

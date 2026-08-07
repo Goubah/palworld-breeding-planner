@@ -8,19 +8,33 @@
 // breeding two existing states together.
 //
 // Gender model: an owned Pal has a fixed, known gender ('M'/'F'). A bred
-// intermediate is tagged 'ANY' -- you can obtain either gender of it by
-// re-hatching its parent pair, at a cost baked into that species' male/
-// female ratio. Two fixed-gender states of the SAME gender can still be
-// bred together (Palworld requires one male + one female per pair, but the
-// Pal Reverser item lets you flip one owned Pal's gender on demand) -- see
-// pairGenderInfo's `reversalSide`, surfaced in the UI so the player knows
-// the route needs that item. Two flexible ('ANY') states are treated as
-// freely gender-compatible (a documented simplification -- hatching a
-// couple of extra eggs of each side to line up genders is cheap relative to
-// matching passives, so it isn't modeled as a throttling cost). This keeps
-// the meaningful constraint -- a skewed-gender bred species paired against
-// a fixed owned gender -- without recursively modeling multi-hatch gender
-// matching for the fully-flexible case.
+// intermediate is tagged 'ANY' -- either gender is obtainable, but not for
+// free: you re-hatch it until it lands on the side you need.
+//
+// Palworld requires one male and one female per pair, so every pairing has
+// to arrange that, and the cost is charged as a ONE-OFF setup rather than a
+// per-egg penalty. That distinction is the whole model. Once a male and a
+// female are paired, every egg they produce is usable, so multiplying the
+// child's egg count by a gender probability over-charges in proportion to
+// how hard the step is -- worst on the final step, which is the one that
+// decides which route wins. Measured on a real 252-Pal roster: pricing it
+// per-egg inflated the same real cost by about half again.
+//
+//  - fixed x fixed, opposite genders: free.
+//  - fixed x fixed, same gender: free, but needs a Pal Reverser (the item
+//    that flips a gender on demand). See pairGenderInfo's `reversalSide`,
+//    surfaced in the UI so the player knows the route needs that item.
+//  - fixed x flexible: re-hatch the flexible side until it is the opposite
+//    of the fixed one, costing (1/p - 1) extra copies of it.
+//  - flexible x flexible: hatch one of each; if they clash, re-roll
+//    whichever side is cheaper to re-roll for the gender that is missing.
+//    This used to be priced at zero, which quietly biased every search
+//    towards bred pairs and away from the roster the tool exists to exploit.
+//
+// The re-roll figures assume that strategy specifically. Batching a dozen
+// eggs and pairing up opportunistically does better, so they are an upper
+// bound on well-played execution rather than an exact cost. Every term in
+// them is a species gender ratio out of the game data; nothing is tuned.
 
 import { childOf } from './breeding.js';
 import { cachedOutcomeDistribution } from './probability.js';
@@ -201,33 +215,53 @@ export function checkPreflight({ ownedPals, targetSpeciesIdx, desiredPassiveName
 }
 
 /**
- * Like the old pairGenderProbability, but also reports whether the pairing
- * only works by using a Pal Reverser (the in-game item that flips a Pal's
- * gender) on one of the two OWNED, fixed-gender sides. Two fixed-gender Pals
- * of the same gender used to be a hard dead end (probability 0); Palworld
+ * Gender cost of pairing two states: a per-egg probability `p`, and a
+ * one-off `setup` cost in the same minutes unit as `effort`.
+ *
+ * `p` is always 1 here -- gender is priced entirely through `setup`, because
+ * arranging it happens once per pair, not once per egg (see the gender model
+ * note at the top of this file). The one place gender still moves a per-egg
+ * probability is feasibleGenderAssignments, for the single special pair whose
+ * child species depends on which parent is male.
+ *
+ * `reversalSide` is 'A'/'B' -- whichever OWNED, fixed-gender side needs a Pal
+ * Reverser -- or null when no reversal is involved. Two fixed-gender Pals of
+ * the same gender used to be a hard dead end (probability 0); Palworld
  * actually lets you reverse one of them on demand, so that pairing is fully
- * usable -- just worth flagging to the player, since it costs an item they
- * need to have or make. `reversalSide` is 'A'/'B' (whichever side needs the
- * item) or null when no reversal is involved.
+ * usable, just worth flagging since it costs an item.
+ *
+ * Both states must carry `.effort`: the setup cost is measured in extra
+ * copies of a parent, so it is meaningless without one.
  */
 function pairGenderInfo(a, b, maleProbOf) {
   const aFixed = a.genderTag === 'M' || a.genderTag === 'F';
   const bFixed = b.genderTag === 'M' || b.genderTag === 'F';
+
   if (aFixed && bFixed) {
-    if (a.genderTag !== b.genderTag) return { p: 1, reversalSide: null };
-    return { p: 1, reversalSide: 'B' };
+    if (a.genderTag !== b.genderTag) return { p: 1, reversalSide: null, setup: 0 };
+    return { p: 1, reversalSide: 'B', setup: 0 };
   }
-  if (aFixed && !bFixed) {
-    const needed = a.genderTag === 'M' ? 'F' : 'M';
-    const mp = maleProbOf(b.species);
-    return { p: needed === 'M' ? mp : (1 - mp), reversalSide: null };
+
+  if (aFixed !== bFixed) {
+    // Re-hatch the flexible side until it is the gender the fixed side needs.
+    // That takes 1/pNeeded copies in expectation, and the first of them is
+    // already paid for by flex.effort, so only the remainder is charged here.
+    const fixed = aFixed ? a : b;
+    const flex = aFixed ? b : a;
+    const mp = maleProbOf(flex.species);
+    const pNeeded = fixed.genderTag === 'M' ? (1 - mp) : mp;
+    return { p: 1, reversalSide: null, setup: flex.effort * (1 / pNeeded - 1) };
   }
-  if (!aFixed && bFixed) {
-    const needed = b.genderTag === 'M' ? 'F' : 'M';
-    const mp = maleProbOf(a.species);
-    return { p: needed === 'M' ? mp : (1 - mp), reversalSide: null };
-  }
-  return { p: 1, reversalSide: null }; // both flexible -- see gender model note above
+
+  // Both flexible. Hatch one of each: with probability mA*mB they are both
+  // male and a female is missing, and symmetrically for two females. Either
+  // way, re-roll whichever side is cheaper to re-roll for the missing gender.
+  const mA = maleProbOf(a.species);
+  const mB = maleProbOf(b.species);
+  const setup =
+    mA * mB * Math.min(a.effort / (1 - mA), b.effort / (1 - mB))
+    + (1 - mA) * (1 - mB) * Math.min(a.effort / mA, b.effort / mB);
+  return { p: 1, reversalSide: null, setup };
 }
 
 function genderTagToGender(tag) {
@@ -308,9 +342,10 @@ function protectAncestors(keep, allStates) {
  * pool can only help, and junk only dilutes the pool the child draws from.
  *
  * Gender must match exactly rather than treating 'ANY' as universally better.
- * It isn't: two fixed-gender parents pair at probability 1 (a Pal Reverser
- * covers the same-gender case), whereas pairing a flexible parent against a
- * fixed one costs that species' gender ratio. Neither dominates the other.
+ * It isn't: two fixed-gender parents pair for nothing (a Pal Reverser covers
+ * the same-gender case), whereas a flexible parent has to be re-hatched onto
+ * the gender its partner needs, which costs extra copies of it. Neither tag
+ * dominates the other.
  */
 function dominates(t, s) {
   return t.species === s.species
@@ -442,7 +477,7 @@ export function runSolver({
     // reading: at worst the optimisation just doesn't fire.
     const isFinalRound = round === maxSteps;
 
-    const emitChild = (keyA, keyB, a, b, childSpecies, genderP, reversalSide = null) => {
+    const emitChild = (keyA, keyB, a, b, childSpecies, genderP, reversalSide = null, genderSetup = 0) => {
       const outcomes = cachedOutcomeDistribution(a.mask, a.junk, b.mask, b.junk);
       for (const outcome of outcomes) {
         const successProb = outcome.p * genderP;
@@ -460,7 +495,9 @@ export function runSolver({
         // first won permanently, meaning a Reverser route could displace an
         // identical one that needed no item, purely by discovery order.
         const reverserCost = reversalSide ? reverserPenalty : 0;
-        const childEffort = a.effort + b.effort + timeCost + reverserCost;
+        // genderSetup is a one-off, not a per-egg cost, so it sits alongside
+        // timeCost rather than inside it -- see pairGenderInfo.
+        const childEffort = a.effort + b.effort + timeCost + reverserCost + genderSetup;
 
         const childDepth = Math.max(a.depth, b.depth) + 1;
         const childUsesReverser = a.usesReverser || b.usesReverser || !!reversalSide;
@@ -472,6 +509,7 @@ export function runSolver({
             usesReverser: childUsesReverser,
             effort: childEffort, depth: childDepth, origin: 'bred',
             parentAKey: keyA, parentBKey: keyB, p: successProb, attempts, reversalSide,
+            genderSetup,
             ownedRefs: [],
           });
           // A strictly cheaper route may lift it back out of domination, so
@@ -514,9 +552,15 @@ export function runSolver({
         const childSpecies = childOf(a.species, null, b.species, null);
         if (childSpecies === null) return;
         if (isFinalRound && childSpecies !== targetSpeciesIdx) return;
-        const { p: genderP, reversalSide } = pairGenderInfo(a, b, maleProbOf);
+        const { p: genderP, reversalSide, setup } = pairGenderInfo(a, b, maleProbOf);
         if (genderP <= 0) return;
-        emitChild(keyA, keyB, a, b, childSpecies, genderP, reversalSide);
+        // No species in the current data sits at a 0% or 100% male ratio, but
+        // if one ever did, a pair of them could never produce one of each and
+        // the setup cost would come back infinite. Drop the pairing rather
+        // than seeding an infinite-effort state that eats a beam slot and can
+        // surface as a route costing "unknown".
+        if (!Number.isFinite(setup)) return;
+        emitChild(keyA, keyB, a, b, childSpecies, genderP, reversalSide, setup);
         return;
       }
 
@@ -527,6 +571,12 @@ export function runSolver({
       // offered here -- this only ever matters for Katress/Wixen, and the
       // extra same-gender-fixed branch it would need is not worth the
       // complexity for one pair.
+      //
+      // This is also the one place gender is still priced per egg rather than
+      // as a one-off setup. Here the gender assignment SELECTS the child
+      // species rather than merely gating the pairing, so it isn't the same
+      // quantity, and rederiving it as a setup cost for a single pair in the
+      // whole game isn't worth the divergence.
       for (const asg of feasibleGenderAssignments(a, b, maleProbOf)) {
         const childSpecies = childOf(a.species, asg.aGender, b.species, asg.bGender);
         if (childSpecies === null) continue;
@@ -717,7 +767,7 @@ function reconstructRoute(state, allStates) {
   return {
     type: 'bred', species: state.species, mask: state.mask, junk: state.junk,
     effort: state.effort, depth: state.depth, p: state.p, attempts: state.attempts,
-    usesReverser: state.usesReverser,
+    usesReverser: state.usesReverser, genderSetup: state.genderSetup || 0,
     parentA: a,
     parentB: b,
   };

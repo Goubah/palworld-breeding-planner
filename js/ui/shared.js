@@ -57,6 +57,15 @@ export function plural(n, singular, pluralForm = singular + 's') {
   return `${n.toLocaleString()} ${n === 1 ? singular : pluralForm}`;
 }
 
+/** Minutes as the coarsest unit that still reads precisely. */
+export function formatEffort(minutes) {
+  if (!isFinite(minutes)) return 'unknown';
+  if (minutes < 60) return `~${minutes.toFixed(0)} min`;
+  const hrs = minutes / 60;
+  if (hrs < 48) return `~${hrs.toFixed(1)} hr`;
+  return `~${(hrs / 24).toFixed(1)} days`;
+}
+
 /** Wires up a fast custom hover tooltip on `el`. No-op if `text` is falsy. */
 export function attachTooltip(el, text) {
   if (!text) return;

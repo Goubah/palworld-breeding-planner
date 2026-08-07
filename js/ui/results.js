@@ -6,7 +6,7 @@
 
 import { getPals, getMeta, palByInternal } from '../data.js';
 import * as store from '../store.js';
-import { attachTooltip, plural } from './shared.js';
+import { attachTooltip, plural, formatEffort } from './shared.js';
 import { renderRouteSteps, renderRouteTree } from './route-views.js';
 
 let worker = null;
@@ -181,14 +181,6 @@ export function runSearch({ targetSpecies, desiredPassives }) {
       timePerBreed: settings.timePerBreed,
     },
   });
-}
-
-function formatEffort(minutes) {
-  if (!isFinite(minutes)) return 'unknown';
-  if (minutes < 60) return `~${minutes.toFixed(0)} min`;
-  const hrs = minutes / 60;
-  if (hrs < 48) return `~${hrs.toFixed(1)} hr`;
-  return `~${(hrs / 24).toFixed(1)} days`;
 }
 
 function renderResults(result, request, meta = {}) {

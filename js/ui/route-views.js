@@ -15,7 +15,7 @@
 // sideways. The indentation became the structure instead of the Pals.
 
 import { getPals, passiveByInternal } from '../data.js';
-import { renderPalIcon, passiveTierClass, attachTooltip } from './shared.js';
+import { renderPalIcon, passiveTierClass, attachTooltip, formatEffort } from './shared.js';
 import { collectOwnedLeaves, countOwnedUses, desiredFirst, flattenSteps, layoutTree, leafStateKey } from './route-model.js';
 
 // Tree geometry.
@@ -261,6 +261,23 @@ export function renderRouteSteps(route, { desiredPassives, ownedEntries }) {
     const pct = step.node.p * 100;
     cost.textContent = `${pct >= 0.1 ? pct.toFixed(1) : pct.toExponential(1)}% chance per egg, about ${step.node.attempts.toFixed(0)} eggs expected`;
     body.appendChild(cost);
+
+    // The egg count above covers passives only. Getting a male and a female
+    // into the pen is a separate, one-off cost, and without this line the
+    // per-step numbers would not add up to the route total in the header --
+    // which for a tool whose value is that its maths is real would be worse
+    // than the mispricing this replaced.
+    //
+    // Terse on the line, explained on hover: most steps of a long route carry
+    // this cost, and repeating the full sentence on each one buries the step
+    // list in identical text.
+    if (step.node.genderSetup > 0) {
+      const gender = document.createElement('div');
+      gender.className = 'route-step-cost route-step-gender';
+      gender.textContent = `Plus ${formatEffort(step.node.genderSetup)} lining up genders`;
+      attachTooltip(gender, 'A pair needs one male and one female. This is the expected cost of re-hatching a bred parent until it comes out the gender its partner needs, paid once before you start collecting eggs from them.');
+      body.appendChild(gender);
+    }
 
     // A step producing none of the desired passives looks like wasted work.
     // It is not: it reaches a species the route needs, and it dilutes unwanted

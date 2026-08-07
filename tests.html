@@ -345,17 +345,179 @@ test('feasibleGenderAssignments: regression for the bug where flexible (ANY) sta
 });
 
 test('pairGenderInfo: same-gender fixed pair is usable via Pal Reverser, flagged on one side', () => {
-  const sameGender = pairGenderInfo({ species: 1, genderTag: 'M' }, { species: 2, genderTag: 'M' }, () => 0.5);
+  const fixedM = { species: 1, genderTag: 'M', effort: 0 };
+  const sameGender = pairGenderInfo(fixedM, { species: 2, genderTag: 'M', effort: 0 }, () => 0.5);
   assertEqual(sameGender.p, 1, 'a Pal Reverser makes the pairing fully usable, not just unlikely');
   assertEqual(sameGender.reversalSide, 'B', 'exactly one side should be flagged as needing the item');
+  assertEqual(sameGender.setup, 0, 'two owned Pals need no re-hatching, so no setup cost');
 
-  const diffGender = pairGenderInfo({ species: 1, genderTag: 'M' }, { species: 2, genderTag: 'F' }, () => 0.5);
+  const diffGender = pairGenderInfo(fixedM, { species: 2, genderTag: 'F', effort: 0 }, () => 0.5);
   assertEqual(diffGender.p, 1);
   assertEqual(diffGender.reversalSide, null, 'no reversal needed when genders already differ');
+  assertEqual(diffGender.setup, 0);
+});
 
-  const oneFixed = pairGenderInfo({ species: 1, genderTag: 'F' }, { species: 2, genderTag: 'ANY' }, (i) => (i === 2 ? 0.7 : 0.5));
-  assertClose(oneFixed.p, 0.7, 1e-9, 'flexible side must supply MALE at its species male-probability');
+test('pairGenderInfo: gender is priced as a one-off setup cost, never per egg', () => {
+  // The per-egg framing this replaced multiplied the CHILD's egg count by the
+  // gender probability, which over-charges in proportion to how hard the step
+  // is. Once a male and a female are paired, every egg they produce is usable,
+  // so the cost is re-hatching a parent -- paid once, before any egg of the
+  // child is laid.
+  const fixedF = { species: 1, genderTag: 'F', effort: 0 };
+  const flex = { species: 2, genderTag: 'ANY', effort: 100 };
+  const maleProb = (i) => (i === 2 ? 0.7 : 0.5);
+
+  const oneFixed = pairGenderInfo(fixedF, flex, maleProb);
+  assertEqual(oneFixed.p, 1, 'gender must not touch the per-egg probability');
   assertEqual(oneFixed.reversalSide, null, 'reversal only applies when both sides are fixed');
+  // Needs a male at p=0.7, so 1/0.7 copies in expectation. The first is
+  // already paid for by flex.effort, leaving 100 * (1/0.7 - 1).
+  assertClose(oneFixed.setup, 100 * (1 / 0.7 - 1), 1e-9);
+
+  // Argument order must not change the price.
+  const swapped = pairGenderInfo(flex, fixedF, maleProb);
+  assertClose(swapped.setup, oneFixed.setup, 1e-9);
+
+  // A flexible side that is already almost always the needed gender is nearly
+  // free; one that almost never is costs many re-hatches.
+  const easy = pairGenderInfo(fixedF, flex, () => 0.99).setup;
+  const hard = pairGenderInfo(fixedF, flex, () => 0.01).setup;
+  assert(easy < 2, `a 99% male species should be near-free to line up, got ${easy}`);
+  assert(hard > 9000, `a 1% male species should be punishing, got ${hard}`);
+});
+
+test('pairGenderInfo: two flexible parents are not free, and the cheaper side gets re-rolled', () => {
+  // The bug this covers: both-flexible returned p=1 with no cost at all, so a
+  // pair of bred parents was priced as though gender did not exist, while an
+  // owned parent was charged its species ratio. That quietly biased every
+  // search away from the roster the tool exists to exploit.
+  const a = { species: 1, genderTag: 'ANY', effort: 100 };
+  const b = { species: 2, genderTag: 'ANY', effort: 400 };
+  const even = pairGenderInfo(a, b, () => 0.5);
+  assertEqual(even.p, 1, 'gender must not touch the per-egg probability');
+  assertEqual(even.reversalSide, null, 'bred parents never need a Pal Reverser');
+  assert(even.setup > 0, 'two flexible parents must cost something to line up');
+
+  // Both 50/50: they clash half the time (a quarter both male, a quarter both
+  // female), and the fix is one re-roll of the cheaper side, which lands on
+  // the needed gender half the time. So 0.25*(2*100) + 0.25*(2*100) = 100.
+  assertClose(even.setup, 100, 1e-9);
+
+  // Re-rolling is the CHEAPER side's job, so making the expensive side even
+  // more expensive must not change the price.
+  const dearer = pairGenderInfo(a, { ...b, effort: 99999 }, () => 0.5);
+  assertClose(dearer.setup, even.setup, 1e-9, 'the expensive side is never the one re-rolled');
+
+  // Argument order must not change the price.
+  assertClose(pairGenderInfo(b, a, () => 0.5).setup, even.setup, 1e-9);
+
+  // Two parents of a heavily male-skewed species clash far more often, so
+  // lining them up costs more than an even pair of the same efforts.
+  const skewed = pairGenderInfo(a, { ...b, effort: 100 }, () => 0.9);
+  const evenSame = pairGenderInfo(a, { ...b, effort: 100 }, () => 0.5);
+  assert(skewed.setup > evenSame.setup,
+    `a 90/10 species should be harder to pair than a 50/50 one (${skewed.setup} vs ${evenSame.setup})`);
+});
+
+test('dominance stays sound: a cheaper parent never costs more to line up', () => {
+  // Before this model a parent's effort was purely additive -- it was added to
+  // the child and had no other consequence. Now it also drives the gender
+  // setup cost, so pruneDominated() (which discards a state the moment another
+  // matches it at no greater effort) is only safe if that cost is monotone in
+  // effort. If it were not, discarding the pricier state could throw away the
+  // cheaper route, silently, with no way to notice from the output.
+  const probs = [0.1, 0.3, 0.5, 0.7, 0.9];
+  let checked = 0;
+  for (const mDom of probs) {
+    for (const mPartner of probs) {
+      const maleProb = (i) => (i === 1 ? mDom : mPartner);
+      for (const dominatingEffort of [0, 1, 50, 400]) {
+        for (const dominatedEffort of [400, 900, 5000]) {
+          if (dominatingEffort > dominatedEffort) continue;
+          const better = { species: 1, genderTag: 'ANY', effort: dominatingEffort };
+          const worse = { species: 1, genderTag: 'ANY', effort: dominatedEffort };
+          for (const partner of [
+            { species: 2, genderTag: 'ANY', effort: 250 },
+            { species: 2, genderTag: 'M', effort: 0 },
+            { species: 2, genderTag: 'F', effort: 0 },
+          ]) {
+            const cheap = pairGenderInfo(better, partner, maleProb);
+            const dear = pairGenderInfo(worse, partner, maleProb);
+            assert(cheap.setup <= dear.setup + 1e-9,
+              `cheaper parent (${dominatingEffort}) cost ${cheap.setup} to line up vs ${dear.setup} for the pricier one (${dominatedEffort})`);
+            checked++;
+          }
+        }
+      }
+    }
+  }
+  assert(checked > 200, `expected a broad sweep, only checked ${checked}`);
+});
+
+test('an unpairable gender ratio drops the pairing instead of costing infinity', () => {
+  // No species in the shipped data sits at 0% or 100% male, so this guards a
+  // future data regen rather than today's numbers. Two flexible parents of a
+  // 100%-male species can never produce one of each, and an infinite setup
+  // cost would otherwise become a state that eats a beam slot and can surface
+  // as a route costing "unknown".
+  const bothFlexible = pairGenderInfo(
+    { species: 1, genderTag: 'ANY', effort: 100 },
+    { species: 2, genderTag: 'ANY', effort: 100 },
+    () => 1);
+  assertEqual(Number.isFinite(bothFlexible.setup), false, 'the impossible case must be recognisable as impossible');
+
+  const relaxaurus = palByName('Relaxaurus');
+  const sparkit = palByName('Sparkit');
+  const reptyro = palByName('Reptyro');
+  assert(relaxaurus && sparkit && reptyro, 'fixture pals must exist');
+  const ownedPals = [
+    { speciesIdx: relaxaurus.i, gender: 'MALE', passiveInternalNames: [] },
+    { speciesIdx: sparkit.i, gender: 'FEMALE', passiveInternalNames: [] },
+  ];
+  const run = (maleProbOf) => runSolver({
+    ownedPals, targetSpeciesIdx: reptyro.i, desiredPassiveNames: [],
+    maleProbOf, genderRules: ctx.meta.genderSpecificRules, maxSteps: 4,
+  });
+
+  const allMale = run(() => 1);
+  for (const r of allMale.results) {
+    assert(isFinite(r.effort), `a route came back costing ${r.effort}`);
+  }
+
+  // Guard the guard: if the fixture stopped finding routes at all, the loop
+  // above would pass for the wrong reason.
+  const normal = run((i) => ctx.pals[i].maleProb);
+  assert(normal.results.length > 0, 'fixture must find routes at normal gender ratios');
+  for (const r of normal.results) assert(isFinite(r.effort));
+});
+
+test('gender setup cost reaches the route, so the steps account for the total', () => {
+  // The step view itemises eggs per step. If the solver charged a gender cost
+  // the route never carried, the per-step numbers would silently stop adding
+  // up to the total in the route header.
+  const lamball = palByName('Lamball');
+  const legend = ctx.passives.find(p => p.name === 'Legend');
+  const lucky = ctx.passives.find(p => p.name === 'Lucky');
+  assert(lamball && legend && lucky, 'fixture pal/passives must exist');
+
+  const result = runSolver({
+    ownedPals: [
+      { speciesIdx: lamball.i, gender: 'MALE', passiveInternalNames: [legend.internalName] },
+      { speciesIdx: lamball.i, gender: 'FEMALE', passiveInternalNames: [lucky.internalName] },
+    ],
+    targetSpeciesIdx: lamball.i,
+    desiredPassiveNames: [legend.internalName, lucky.internalName],
+    maleProbOf: (i) => ctx.pals[i].maleProb,
+    genderRules: ctx.meta.genderSpecificRules,
+    maxSteps: 1,
+  });
+
+  assert(result.results.length > 0, 'expected a 1-step route');
+  const best = result.results[0];
+  assertEqual(best.genderSetup, 0,
+    'two owned Pals of opposite gender need no lining up, so this step must carry no setup cost');
+  assertClose(best.effort, best.attempts * 5, 1e-9,
+    'with no setup and no Reverser, effort is exactly the egg time');
 });
 
 test('gender reversal: two owned same-gender Pals can still be bred, flagged in the route tree', () => {
