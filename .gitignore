@@ -8,3 +8,6 @@ tools/*.txt
 # OS junk
 .DS_Store
 Thumbs.db
+# Local working notes for Claude Code. Kept out of the repo deliberately:
+# these are personal notes rather than project documentation.
+CLAUDE.md
