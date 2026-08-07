@@ -312,6 +312,10 @@ body {
   padding: 0 0.3rem;
   margin-left: auto;
 }
+/* When both tags show, only the first should push right; the second sits
+   beside it rather than fighting for the same auto margin. */
+.passive-tag + .passive-tag { margin-left: 0.3rem; }
+.passive-tag-mutation { color: #a374f0; border-color: #a374f0; }
 
 /* Roster list */
 .roster-controls {

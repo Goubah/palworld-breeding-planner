@@ -157,6 +157,21 @@ export function passiveTierLabel(rank) {
 
 export const PASSIVE_TIER_ORDER = [5, 4, 3, 2, 1, -1, -2, -3];
 
+/**
+ * The four mutation passives (Babysitter, Heavily Armored, Idiosyncratic,
+ * Immortality) share a MutationPal_ prefix in the game's own data, which is
+ * the only marker distinguishing them -- there is no separate flag.
+ *
+ * They are worth calling out because "parent-only" alone understates the
+ * problem: it reads as "breed it from a parent that has it", but no amount of
+ * breeding will produce the first one. Confirmed by testing that they DO
+ * inherit once a parent carries one.
+ */
+export function isMutationPassive(passive) {
+  return typeof passive.internalName === 'string'
+    && passive.internalName.startsWith('MutationPal_');
+}
+
 export function renderPassiveChip(passive) {
   const chip = document.createElement('span');
   chip.className = 'passive-chip ' + passiveTierClass(passive.rank);
@@ -215,6 +230,13 @@ export function createPassivePicker(onChange, { isExcluded } = {}) {
     isExcluded,
     renderRow: (row, passive) => {
       row.appendChild(renderPassiveChip(passive));
+      if (isMutationPassive(passive)) {
+        const tag = document.createElement('span');
+        tag.className = 'passive-tag passive-tag-mutation';
+        tag.textContent = 'mutation';
+        attachTooltip(tag, 'A mutation passive. It does pass down through breeding (confirmed in game), but some Pal has to have it first: breeding alone will never produce one.');
+        row.appendChild(tag);
+      }
       if (!passive.randomAllowed) {
         const tag = document.createElement('span');
         tag.className = 'passive-tag';
