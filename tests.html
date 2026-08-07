@@ -24,6 +24,7 @@ import { loadGameData, getPals, getPassives, getMeta, palByName } from './js/dat
 import { childOf } from './js/breeding.js';
 import { outcomeDistribution, popcount, choose, inheritCountDistribution, randomAddDistribution } from './js/probability.js';
 import { runSolver, checkPreflight, reachableSpeciesClosure, feasibleGenderAssignments, pairGenderInfo, dominates } from './js/solver.js';
+import { collectOwnedLeaves, countOwnedUses, desiredFirst, flattenSteps, layoutTree, leafStateKey } from './js/ui/route-model.js';
 
 const ctx = {};
 
@@ -523,6 +524,109 @@ test('a Pal Reverser route never wins a tie against one that needs no item', () 
   const free = run(0);
   assertEqual(usesReverser(free.results[0]), true,
     'fixture must still offer a Reverser route when the item is free, or this test proves nothing');
+});
+
+
+// --- route display model (js/ui/route-model.js) ---------------------------
+// Pure structure, so these use hand-built trees rather than solver output --
+// the point is the analysis, not the search.
+
+const ownedLeaf = (species, mask, junk, genderTag, ownedRefs) =>
+  ({ type: 'owned', species, mask, junk, genderTag, ownedRefs });
+const bredNode = (species, mask, junk, parentA, parentB) =>
+  ({ type: 'bred', species, mask, junk, genderTag: 'ANY', parentA, parentB });
+
+test('countOwnedUses: one Pal used in several pairings counts as one Pal, not several', () => {
+  // The real case this exists for: the Frostallion Noct route uses the single
+  // owned Frostallion in three separate pairings. Frostallion can only be bred
+  // from two Frostallions, so reading the tree as "you need three" would make
+  // a runnable route look impossible.
+  const fros = () => ownedLeaf(77, 0, 1, 'M', [234]);
+  const other = ownedLeaf(50, 1, 0, 'F', [7]);
+  const left = bredNode(78, 0, 1, fros(), other);
+  const right = bredNode(78, 0, 1, fros(), fros());
+  const root = bredNode(78, 1, 0, left, right);
+
+  const uses = countOwnedUses(root);
+  assertEqual(uses.get(leafStateKey(fros())), 3, 'the same owned state used three times must report 3');
+  assertEqual(uses.get(leafStateKey(other)), 1);
+  assertEqual(collectOwnedLeaves(root).length, 4, 'all owned leaves are collected, duplicates included');
+});
+
+test('leafStateKey: same species and gender but different passives are NOT the same Pal', () => {
+  const a = ownedLeaf(77, 0b0001, 1, 'M', [1]);
+  const b = ownedLeaf(77, 0b0010, 1, 'M', [2]);
+  const c = ownedLeaf(77, 0b0001, 2, 'M', [3]);
+  const d = ownedLeaf(77, 0b0001, 1, 'F', [4]);
+  assert(leafStateKey(a) !== leafStateKey(b), 'different desired passives must not collapse');
+  assert(leafStateKey(a) !== leafStateKey(c), 'different junk counts must not collapse');
+  assert(leafStateKey(a) !== leafStateKey(d), 'different genders must not collapse');
+  assertEqual(leafStateKey(a), leafStateKey(ownedLeaf(77, 0b0001, 1, 'M', [9])),
+    'identical breeding-relevant state IS the same bucket, whichever roster entry backs it');
+});
+
+test('flattenSteps: post-order, so every parent is built before the step that uses it', () => {
+  const leaf = n => ownedLeaf(n, 0, 0, 'M', [n]);
+  const inner = bredNode(10, 0, 0, leaf(1), leaf(2));
+  const root = bredNode(20, 0, 0, inner, leaf(3));
+  const steps = flattenSteps(root);
+
+  assertEqual(steps.length, 2, 'two bred nodes means two steps');
+  assertEqual(steps[0].node, inner, 'the nested pairing must come first');
+  assertEqual(steps[1].node, root);
+  assertEqual(steps[0].stepNumber, 1);
+  assertEqual(steps[1].stepNumber, 2);
+  assertEqual(steps[0].aStep, null, 'an owned parent has no producing step');
+  assertEqual(steps[1].aStep, 1, 'a bred parent must point back at the step that made it');
+  assertEqual(steps[1].bStep, null);
+});
+
+test('flattenSteps: owned-only tree has no steps at all', () => {
+  assertEqual(flattenSteps(ownedLeaf(1, 0, 0, 'M', [0])).length, 0);
+});
+
+test('desiredFirst: desired passives sort ahead of junk, order otherwise preserved', () => {
+  const out = desiredFirst(['junkA', 'wanted2', 'junkB', 'wanted1'], ['wanted1', 'wanted2']);
+  assertEqual(out.join(','), 'wanted2,wanted1,junkA,junkB',
+    'desired first (in their own original order), then the rest in theirs');
+  assertEqual(desiredFirst([], ['x']).length, 0);
+  assertEqual(desiredFirst(['a', 'b'], []).join(','), 'a,b', 'no desired list means no reordering');
+});
+
+test('layoutTree: every parent sits exactly one column left of its child', () => {
+  // This is what keeps connectors one span long. Pinning owned Pals to a
+  // single column instead would make leaf-to-deep-node links cross unrelated
+  // nodes, which is what made a wide tree unreadable in the first place.
+  const leaf = n => ownedLeaf(n, 0, 0, 'M', [n]);
+  const deep = bredNode(30, 0, 0, bredNode(20, 0, 0, leaf(1), leaf(2)), leaf(3));
+  const root = bredNode(40, 0, 0, deep, leaf(4));
+  const { nodes, columns, rows } = layoutTree(root);
+
+  assertEqual(columns, 4, 'a 3-generation tree occupies 4 columns');
+  assertEqual(rows, 4, 'one row per owned leaf');
+  const byNode = new Map(nodes.map(r => [r.node, r]));
+  for (const rec of nodes) {
+    for (const kid of rec.kids) {
+      assertEqual(byNode.get(kid.node).col, rec.col - 1,
+        'a parent must be exactly one column left of its child');
+    }
+  }
+  assertEqual(byNode.get(root).col, columns - 1, 'the target occupies the rightmost column');
+});
+
+test('layoutTree: leaves take distinct rows and each pairing sits between its parents', () => {
+  const leaf = n => ownedLeaf(n, 0, 0, 'M', [n]);
+  const root = bredNode(40, 0, 0, bredNode(20, 0, 0, leaf(1), leaf(2)), leaf(3));
+  const { nodes } = layoutTree(root);
+
+  const leafRows = nodes.filter(r => r.node.type === 'owned').map(r => r.row).sort((a, b) => a - b);
+  assertEqual(leafRows.join(','), '0,1,2', 'leaves take consecutive distinct rows');
+  for (const rec of nodes) {
+    if (!rec.kids.length) continue;
+    const [a, b] = rec.kids;
+    assertClose(rec.row, (a.row + b.row) / 2, 1e-9,
+      'a bred node must sit midway between its two parents, or the connectors stop reading as a pedigree');
+  }
 });
 
 const reportEl = document.getElementById('report');

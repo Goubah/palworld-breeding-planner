@@ -1,15 +1,18 @@
 // Breeding-routes output, rendered directly below the Target Pal Child
 // section on the same page. Runs the solver in a Web Worker so the beam
 // search never blocks the UI thread, shows live progress, and renders each
-// result as an expandable breeding tree down to owned-roster leaves.
+// result either as a family tree or as a numbered list of breeding steps
+// (see js/ui/route-views.js for why there are two).
 
 import { getPals, getMeta, palByInternal } from '../data.js';
 import * as store from '../store.js';
-import { renderPalIcon, attachTooltip, passiveTierClass, plural } from './shared.js';
+import { attachTooltip, plural } from './shared.js';
+import { renderRouteSteps, renderRouteTree } from './route-views.js';
 
 let worker = null;
-let statusEl, cancelBtn, listEl;
+let statusEl, cancelBtn, listEl, viewToggle;
 let currentRequest = null;
+let lastResult = null, lastMeta = null;
 
 function ensureWorker() {
   if (worker) return worker;
@@ -41,6 +44,10 @@ export function initResultsTab(container) {
   scopeEl.textContent = 'The search returns the fastest routes it can find, including one that needs a Pal Reverser and one that does not, where both exist. All of them use only the Pals in your roster.';
   header.appendChild(scopeEl);
 
+  viewToggle = createViewToggle();
+  viewToggle.el.hidden = true;
+  header.appendChild(viewToggle.el);
+
   cancelBtn = document.createElement('button');
   cancelBtn.className = 'btn btn-secondary';
   cancelBtn.textContent = 'Cancel Search';
@@ -52,6 +59,55 @@ export function initResultsTab(container) {
   listEl = document.createElement('div');
   listEl.className = 'results-list';
   container.appendChild(listEl);
+}
+
+/**
+ * Switches between the two route views. The choice persists like every other
+ * setting -- it's a reading preference, not a per-search decision, and having
+ * it reset on reload would be a small irritation every time.
+ */
+function createViewToggle() {
+  const wrap = document.createElement('div');
+  wrap.className = 'route-view-toggle';
+  wrap.setAttribute('role', 'group');
+  wrap.setAttribute('aria-label', 'How to display each route');
+
+  const label = document.createElement('span');
+  label.className = 'route-view-label';
+  label.textContent = 'Show as';
+  wrap.appendChild(label);
+
+  const buttons = [];
+  const options = [
+    ['tree', 'Family tree', 'The whole plan at once, your own Pals on the left and the target on the right.'],
+    ['steps', 'Steps', 'One breeding pair per line, in the order you would actually do them.'],
+  ];
+  for (const [value, text, hint] of options) {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'btn btn-secondary route-view-btn';
+    btn.textContent = text;
+    attachTooltip(btn, hint);
+    btn.addEventListener('click', () => {
+      if (store.getSettings().routeView === value) return;
+      store.updateSettings({ routeView: value });
+      sync();
+      if (lastResult) renderResults(lastResult, currentRequest, lastMeta);
+    });
+    buttons.push([value, btn]);
+    wrap.appendChild(btn);
+  }
+
+  function sync() {
+    const current = store.getSettings().routeView;
+    for (const [value, btn] of buttons) {
+      const on = value === current;
+      btn.classList.toggle('active', on);
+      btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+    }
+  }
+  sync();
+  return { el: wrap, sync };
 }
 
 function handleWorkerMessage(ev) {
@@ -79,26 +135,43 @@ function handleWorkerMessage(ev) {
 }
 
 export function runSearch({ targetSpecies, desiredPassives }) {
-  currentRequest = { targetSpecies, desiredPassives };
   ensureWorker();
   const settings = store.getSettings();
-  const roster = store.getRoster()
-    .map(p => {
-      const species = palByInternal(p.speciesInternal);
-      return species ? { speciesIdx: species.i, gender: p.gender, passiveInternalNames: p.passiveInternalNames } : null;
-    })
-    .filter(Boolean);
+
+  // ownedPals and ownedEntries are built in ONE pass so their indices cannot
+  // drift apart. This matters: a route's owned leaves identify themselves by
+  // `ownedRefs`, which are positions in the ownedPals array the solver was
+  // given -- NOT positions in store.getRoster(). Rebuilding the display list
+  // separately (map + filter over the roster again) would silently shift
+  // every index after any entry whose species failed to resolve, and the
+  // route views would then name the wrong Pal with total confidence.
+  const ownedPals = [], ownedEntries = [];
+  for (const entry of store.getRoster()) {
+    const species = palByInternal(entry.speciesInternal);
+    if (!species) continue;
+    ownedPals.push({
+      speciesIdx: species.i,
+      gender: entry.gender,
+      passiveInternalNames: entry.passiveInternalNames,
+    });
+    ownedEntries.push(entry);
+  }
+
+  currentRequest = { targetSpecies, desiredPassives, ownedEntries };
+  lastResult = null;
+  lastMeta = null;
 
   const maleProbBySpecies = getPals().map(p => p.maleProb);
 
   statusEl.textContent = 'Starting search...';
   cancelBtn.hidden = false;
+  viewToggle.el.hidden = true;
   listEl.innerHTML = '';
 
   worker.postMessage({
     type: 'run',
     payload: {
-      ownedPals: roster,
+      ownedPals,
       targetSpeciesIdx: targetSpecies.i,
       desiredPassiveNames: desiredPassives.map(p => p.internalName),
       maleProbBySpecies,
@@ -119,7 +192,10 @@ function formatEffort(minutes) {
 }
 
 function renderResults(result, request, meta = {}) {
+  lastResult = result;
+  lastMeta = meta;
   listEl.innerHTML = '';
+
   const widened = meta.attempts > 1
     ? ` The search widened to ${meta.finalBeamWidth.toLocaleString()} to find this.`
     : '';
@@ -129,12 +205,16 @@ function renderResults(result, request, meta = {}) {
     // the beam width would be advice it has taken several times already.
     : `No route found. The search widened to ${plural(meta.finalBeamWidth || 0, 'candidate Pal')} across ${plural(meta.attempts || 1, 'attempt')} without success. Raising "Max breeding generations" in Advanced Settings can help if the target needs more steps; otherwise the passives you want may not be reachable from your current roster.`;
 
+  viewToggle.el.hidden = result.results.length === 0;
+  viewToggle.sync();
+
+  const useTree = store.getSettings().routeView !== 'steps';
+
   result.results.forEach((route, idx) => {
     const card = document.createElement('div');
     card.className = 'card result-card';
     const heading = document.createElement('h4');
-    const genLabel = `${route.depth} generation${route.depth === 1 ? '' : 's'}`;
-    heading.textContent = `Route ${idx + 1} — ${genLabel}, est. ${formatEffort(route.effort)}`;
+    heading.textContent = `Route ${idx + 1} — ${plural(route.depth, 'generation')}, est. ${formatEffort(route.effort)}`;
     card.appendChild(heading);
 
     // Routes that need a Pal Reverser and routes that don't are kept as
@@ -144,166 +224,11 @@ function renderResults(result, request, meta = {}) {
     // together, and some players would rather bank a scarce item regardless.
     const reverserTag = document.createElement('div');
     reverserTag.className = 'route-reverser-tag ' + (route.usesReverser ? 'needs' : 'free');
-    reverserTag.textContent = route.usesReverser
-      ? '⇄ Uses a Pal Reverser'
-      : 'No Pal Reverser needed';
+    reverserTag.textContent = route.usesReverser ? '⇄ Uses a Pal Reverser' : 'No Pal Reverser needed';
     card.appendChild(reverserTag);
-    const scrollWrap = document.createElement('div');
-    scrollWrap.className = 'route-tree-scroll';
-    scrollWrap.appendChild(renderRouteNode(route, request.desiredPassives));
-    card.appendChild(scrollWrap);
+
+    const view = { desiredPassives: request.desiredPassives, ownedEntries: request.ownedEntries };
+    card.appendChild(useTree ? renderRouteTree(route, view) : renderRouteSteps(route, view));
     listEl.appendChild(card);
   });
-}
-
-/**
- * Renders a breeding tree node. The direct parents of the final target
- * (depth 0) sit side by side, matching how a single breeding pair reads
- * left-to-right. Every generation below that (depth > 0) is drawn as a
- * vertical block instead: the two parents stacked, then an "=" restating
- * the child they produce -- since at depth > 0 that child isn't already the
- * card's own heading, unlike depth 0. This also sidesteps the
- * horizontal-space problem a purely side-by-side layout runs into a couple
- * of generations deep (each nested pair only has half its parent's width to
- * work with, so it used to wrap awkwardly); going vertical instead just
- * makes the page taller, which scales fine to 4+ generations.
- */
-function renderRouteNode(node, desiredPassives, depth = 0) {
-  const wrap = document.createElement('div');
-  wrap.className = 'route-node ' + node.type;
-  wrap.appendChild(renderNodeHeader(node, desiredPassives));
-
-  if (node.type === 'owned') {
-    const tag = document.createElement('div');
-    tag.className = 'route-node-tag';
-    tag.textContent = 'From your roster' + (node.genderTag === 'M' ? ' (♂)' : node.genderTag === 'F' ? ' (♀)' : '');
-    if (node.needsReversal) {
-      const note = document.createElement('span');
-      note.className = 'reverser-note';
-      note.textContent = ' — needs Pal Reverser to flip gender for this pairing';
-      tag.appendChild(note);
-    }
-    wrap.appendChild(tag);
-    return wrap;
-  }
-
-  const info = document.createElement('div');
-  info.className = 'route-node-tag';
-  const pct = node.p * 100;
-  const pctStr = pct >= 0.1 ? pct.toFixed(1) : pct.toExponential(1);
-  info.textContent = `Breed together — ${pctStr}% chance per egg, ~${node.attempts.toFixed(1)} eggs expected`;
-  wrap.appendChild(info);
-
-  const toggle = document.createElement('button');
-  toggle.type = 'button';
-  toggle.className = 'route-toggle';
-  toggle.textContent = 'Hide parents ▾';
-
-  // Whichever parent is itself a bred (multi-generation) result comes
-  // first -- consistently left (depth 0) or on top (nested/vertical) -- so
-  // the deepest lineage reads as one consistent edge instead of jumping
-  // sides at random between generations.
-  const [first, second] = orderOperands(node);
-
-  const pair = document.createElement('div');
-  pair.className = depth === 0 ? 'route-pair route-pair-horizontal' : 'route-pair route-pair-vertical';
-  pair.appendChild(renderRouteNode(first, desiredPassives, depth + 1));
-  pair.appendChild(renderRouteNode(second, desiredPassives, depth + 1));
-
-  const collapsible = document.createElement('div');
-  collapsible.className = 'route-collapsible';
-  collapsible.appendChild(pair);
-
-  if (depth > 0) {
-    const equalsRow = document.createElement('div');
-    equalsRow.className = 'route-equals-row';
-    const equals = document.createElement('span');
-    equals.className = 'route-equals';
-    equals.textContent = '=';
-    equalsRow.appendChild(equals);
-    equalsRow.appendChild(renderCompactNode(node));
-    collapsible.appendChild(equalsRow);
-  }
-
-  toggle.addEventListener('click', () => {
-    const hidden = collapsible.hidden = !collapsible.hidden;
-    toggle.textContent = hidden ? 'Show parents ▸' : 'Hide parents ▾';
-  });
-  wrap.appendChild(toggle);
-  wrap.appendChild(collapsible);
-
-  return wrap;
-}
-
-function renderNodeHeader(node, desiredPassives) {
-  const species = getPals()[node.species];
-  const header = document.createElement('div');
-  header.className = 'route-node-header';
-  if (node.needsReversal) header.appendChild(renderReverserBadge());
-  header.appendChild(renderPalIcon(species, 28));
-  const label = document.createElement('span');
-  label.className = 'route-node-label';
-  label.textContent = species ? species.name : `#${node.species}`;
-  header.appendChild(label);
-
-  for (let b = 0; b < desiredPassives.length; b++) {
-    const has = (node.mask & (1 << b)) !== 0;
-    const badge = document.createElement('span');
-    // "has" gets the same rank-tier color used everywhere else (roster,
-    // pickers) so it reads as the actual passive, not a generic green
-    // checkmark; "missing" stays a plain muted strikethrough since there's
-    // no passive present yet to color.
-    badge.className = 'mask-badge ' + (has ? 'has ' + passiveTierClass(desiredPassives[b].rank) : 'missing');
-    badge.textContent = desiredPassives[b].name;
-    attachTooltip(badge, desiredPassives[b].description);
-    header.appendChild(badge);
-  }
-  if (node.junk > 0) {
-    const junkBadge = document.createElement('span');
-    junkBadge.className = 'mask-badge junk';
-    junkBadge.textContent = `+${node.junk} other`;
-    attachTooltip(junkBadge, 'Other passives this Pal carries that aren\'t part of your desired set (specific ones aren\'t tracked, just the count).');
-    header.appendChild(junkBadge);
-  }
-  return header;
-}
-
-/**
- * Small badge shown to the left of an owned Pal's icon when this specific
- * pairing only works by using a Pal Reverser (the in-game item that flips a
- * Pal's gender) on it -- e.g. you own two males of a species and need to
- * flip one to female to breed them together.
- */
-function renderReverserBadge() {
-  const badge = document.createElement('span');
-  badge.className = 'reverser-badge';
-  badge.textContent = '⇄';
-  // Purely visual: the same information is stated in words in the node's
-  // "From your roster ... needs Pal Reverser" tag right below, which is what
-  // screen readers (and touch users, who get no hover tooltip) should get
-  // instead of a bare arrow glyph.
-  badge.setAttribute('aria-hidden', 'true');
-  attachTooltip(badge, 'Needs a Pal Reverser: this Pal must have its gender flipped before it can be paired this way.');
-  return badge;
-}
-
-/** Compact icon+name summary used to restate a node's result after its "=". */
-function renderCompactNode(node) {
-  const species = getPals()[node.species];
-  const el = document.createElement('span');
-  el.className = 'route-compact-node';
-  el.appendChild(renderPalIcon(species, 20));
-  const label = document.createElement('span');
-  label.className = 'route-node-label';
-  label.textContent = species ? species.name : `#${node.species}`;
-  el.appendChild(label);
-  return el;
-}
-
-/** Puts the bred/multi-generation parent first when only one parent is bred. */
-function orderOperands(node) {
-  const { parentA: a, parentB: b } = node;
-  if (a.type === 'bred' && b.type === 'owned') return [a, b];
-  if (b.type === 'bred' && a.type === 'owned') return [b, a];
-  return [a, b];
 }

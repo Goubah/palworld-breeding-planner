@@ -13,6 +13,11 @@ const DEFAULT_SETTINGS = {
   timePerBreed: 5, // minutes per breeding attempt (egg + incubation)
   beamWidth: 1000, // see the comment on solver.js's DEFAULTS for the benchmark behind this number
   maxResults: 5,
+  // 'tree' | 'steps' -- how each route is drawn. A reading preference rather
+  // than a search parameter, so it lives here to survive a reload, but it has
+  // no effect on the solver. Defaults to the tree: it shows the shape of the
+  // whole plan, which is the question people ask first.
+  routeView: 'tree',
 };
 
 function defaultState() {

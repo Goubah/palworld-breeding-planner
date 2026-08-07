@@ -27,6 +27,8 @@ That last rule is easy to miss and it changes the numbers. It's why landing a sp
 
 Every step of a route shows the per-egg chance, how many eggs you should expect, and a rough time estimate.
 
+A route can be read two ways. The family tree lays the whole plan out left to right, with the Pals you own on the left and the finished Pal on the right. The step list gives the same plan as numbered breeding pairs in the order you would do them. Either way, each Pal you own is listed with its actual passives, so you know which one to reach for when you own several of a species.
+
 ## Also accounted for
 
 Gender ratios. Breeding needs one male and one female, and 44 species are skewed, some as far as 10% male, so that cost is part of the estimate.
