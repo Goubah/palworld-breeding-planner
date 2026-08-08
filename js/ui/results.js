@@ -8,7 +8,7 @@ import { getPals, getMeta, palByInternal } from '../data.js';
 import * as store from '../store.js';
 import { attachTooltip, plural, formatEffort } from './shared.js';
 import { renderRouteSteps, renderRouteTree } from './route-views.js';
-import { suppressRedundantReverserRoutes } from './route-model.js';
+import { suppressRedundantReverserRoutes, itemFreeRoutesFirst } from './route-model.js';
 
 let worker = null;
 let statusEl, cancelBtn, listEl, viewToggle;
@@ -45,7 +45,7 @@ export function initResultsTab(container) {
   // wrong as often as it was right.
   const scopeEl = document.createElement('p');
   scopeEl.className = 'results-scope muted';
-  scopeEl.textContent = 'The search returns the fastest routes it can find, all of them using only the Pals in your roster. A route that needs a Pal Reverser is listed only when the item actually saves you time or a generation.';
+  scopeEl.textContent = 'The search returns the fastest routes it can find, all of them using only the Pals in your roster. Routes needing no Pal Reverser are listed first, and one that needs the item appears only when it actually saves you time or a generation.';
   header.appendChild(scopeEl);
 
   viewToggle = createViewToggle();
@@ -195,8 +195,9 @@ function renderResults(result, request, meta = {}) {
   // A Reverser route the item-free one already beats on both generations and
   // time is not a second option, it's the same plan with a chore attached.
   // See suppressRedundantReverserRoutes for why this can't be a threshold on
-  // the effort gap.
-  const routes = suppressRedundantReverserRoutes(result.results);
+  // the effort gap. What survives is then ordered item-free first, so route 1
+  // is the plan most players actually want to run.
+  const routes = itemFreeRoutesFirst(suppressRedundantReverserRoutes(result.results));
 
   const widened = meta.attempts > 1
     ? ` The search widened to ${meta.finalBeamWidth.toLocaleString()} to find this.`

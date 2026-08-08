@@ -39,6 +39,32 @@ export function suppressRedundantReverserRoutes(routes) {
 }
 
 /**
+ * Puts the routes needing no Pal Reverser first, keeping the solver's
+ * generations-then-effort ranking within each group.
+ *
+ * Most players would rather not farm the item, so the plan they are most
+ * likely to run should not be the one they have to scroll past a whole family
+ * tree to reach. Once a dominated Reverser route is gone (above), any that
+ * survives is genuinely faster or shallower -- which means it would otherwise
+ * take the top slot every time it appears, and the common preference would
+ * always be second.
+ *
+ * A partition, not a sort comparator: it cannot perturb the order inside
+ * either group no matter how the engine implements sorting, and the group a
+ * route lands in does not depend on any other route.
+ *
+ * This does mean route 1 is no longer always the cheapest, so the estimate
+ * stays on every card. A Reverser route that saves ten hours is still worth
+ * taking, and the reader has to be able to see that it does.
+ */
+export function itemFreeRoutesFirst(routes) {
+  return [
+    ...routes.filter(r => !r.usesReverser),
+    ...routes.filter(r => r.usesReverser),
+  ];
+}
+
+/**
  * Identity of an owned leaf as the SOLVER sees it: species, which desired
  * passives it carries, how much junk, and its gender. Two leaves sharing this
  * key came from the same bucket of interchangeable roster Pals.

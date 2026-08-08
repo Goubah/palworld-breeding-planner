@@ -24,7 +24,7 @@ import { loadGameData, getPals, getPassives, getMeta, palByName } from './js/dat
 import { childOf } from './js/breeding.js';
 import { outcomeDistribution, popcount, choose, inheritCountDistribution, randomAddDistribution } from './js/probability.js';
 import { runSolver, checkPreflight, reachableSpeciesClosure, feasibleGenderAssignments, pairGenderInfo, dominates } from './js/solver.js';
-import { collectOwnedLeaves, countOwnedUses, desiredFirst, flattenSteps, layoutTree, leafStateKey, suppressRedundantReverserRoutes } from './js/ui/route-model.js';
+import { collectOwnedLeaves, countOwnedUses, desiredFirst, flattenSteps, layoutTree, leafStateKey, suppressRedundantReverserRoutes, itemFreeRoutesFirst } from './js/ui/route-model.js';
 
 const ctx = {};
 
@@ -908,6 +908,67 @@ test('suppressRedundantReverserRoutes: preserves input order', () => {
   assertEqual(out.length, 2);
   assertEqual(out[0], a, 'first in stays first out');
   assertEqual(out[1], c);
+});
+
+test('itemFreeRoutesFirst: the item-free route leads even when a Reverser route is faster', () => {
+  // Lyleen Noct: the Reverser route really is 592 min cheaper, so the solver
+  // ranks it first. Most players would rather not farm the item, and the plan
+  // they are most likely to run should not be the one below a family tree.
+  const rev = routeOf(4, 872.71, true);
+  const free = routeOf(4, 1464.84, false);
+  const out = itemFreeRoutesFirst([rev, free]);
+  assertEqual(out.length, 2, 'ordering must not drop anything');
+  assertEqual(out[0], free, 'the item-free route takes the top slot');
+  assertEqual(out[1], rev, 'the faster Reverser route is still offered, just second');
+});
+
+test('itemFreeRoutesFirst: keeps the solver ranking inside each group', () => {
+  // Generations-then-effort still decides the order among routes of the same
+  // kind. Only the item-free/Reverser split is allowed to reorder anything.
+  const f1 = routeOf(2, 10, false), f2 = routeOf(2, 30, false), f3 = routeOf(4, 5, false);
+  const r1 = routeOf(1, 99, true), r2 = routeOf(3, 100, true);
+  const out = itemFreeRoutesFirst([r1, f1, f2, r2, f3]);
+  assertEqual(out.map(r => r.usesReverser).join(','), 'false,false,false,true,true',
+    'every item-free route comes before every Reverser route');
+  // Identity per slot, not a join: stringifying objects gives
+  // "[object Object]" for every one of them, so a joined comparison of two
+  // equal-length lists passes whatever order they are actually in.
+  assertEqual(out[0], f1, 'item-free routes keep their incoming order');
+  assertEqual(out[1], f2);
+  assertEqual(out[2], f3);
+  assertEqual(out[3], r1, 'Reverser routes keep theirs too');
+  assertEqual(out[4], r2);
+});
+
+test('itemFreeRoutesFirst: no-op on lists that are all one kind', () => {
+  const a = routeOf(1, 5, false), b = routeOf(2, 3, false);
+  const out = itemFreeRoutesFirst([a, b]);
+  assertEqual(out.length, 2, 'an all-item-free list keeps every route');
+  assertEqual(out[0], a, 'and is left in exactly the order it arrived');
+  assertEqual(out[1], b);
+  const rev = [routeOf(4, 538.43, true)];
+  assertEqual(itemFreeRoutesFirst(rev).length, 1,
+    'a Reverser-only result still renders, it is the only plan there is');
+  assertEqual(itemFreeRoutesFirst([]).length, 0);
+});
+
+test('suppress then order: the pipeline renderResults actually runs', () => {
+  // The two functions compose in this direction in results.js, so pin the
+  // combined behaviour rather than trusting each half separately.
+  const pipeline = rs => itemFreeRoutesFirst(suppressRedundantReverserRoutes(rs));
+
+  // Frostallion Noct: dominated Reverser route goes, one card left.
+  const fnFree = routeOf(5, 1076.29, false);
+  const fn = pipeline([fnFree, routeOf(5, 1086.29, true)]);
+  assertEqual(fn.length, 1);
+  assertEqual(fn[0], fnFree);
+
+  // Lyleen Noct: both survive, item-free leads.
+  const lyRev = routeOf(4, 872.71, true), lyFree = routeOf(4, 1464.84, false);
+  const ly = pipeline([lyRev, lyFree]);
+  assertEqual(ly.length, 2);
+  assertEqual(ly[0], lyFree, 'route 1 is the plan needing no item');
+  assertEqual(ly[1], lyRev);
 });
 
 const reportEl = document.getElementById('report');
