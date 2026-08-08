@@ -93,8 +93,11 @@ separately shifts every index after any entry whose species fails to resolve,
 and the route views then name the wrong Pal with total confidence. Measured with
 three bad entries seeded into a 252-Pal roster: 11 of 11 leaves misidentified.
 
-**Pal icon paths use `internalName`, never the display name.** Frostallion's
-file is `Kirin_Ice.webp`.
+**Pal icon paths use `internalName`, never the display name.** Frostallion is
+`IceHorse.webp`, Frostallion Noct is `IceHorse_Dark.webp`. Don't infer the file
+from the display name and don't trust a plausible guess: `Kirin_Ice.webp` reads
+like it ought to be the ice horse, but it belongs to Univolt Cryst. Look the
+species up in `data/pals.json`.
 
 **To check for clipped text, measure the element that actually clips.**
 `overflow: hidden` sits on the individual chips (`.route-tree-line2
