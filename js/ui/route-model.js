@@ -34,8 +34,28 @@
  */
 export function suppressRedundantReverserRoutes(routes) {
   const free = routes.filter(r => !r.usesReverser);
-  return routes.filter(r => !r.usesReverser
-    || !free.some(f => f.depth <= r.depth && f.effort <= r.effort));
+  return routes.filter(r => !isRedundantReverserRoute(r, free));
+}
+
+/**
+ * The complement of the above: exactly the routes it drops.
+ *
+ * The UI says how many were hidden and offers to show them, so nothing
+ * disappears without the reader being told. Both functions run the same
+ * predicate over the same `free` set, so they partition the input by
+ * construction and cannot drift into disagreeing about a route.
+ */
+export function redundantReverserRoutes(routes) {
+  const free = routes.filter(r => !r.usesReverser);
+  return routes.filter(r => isRedundantReverserRoute(r, free));
+}
+
+/** True when `route` needs a Reverser and some item-free route already matches
+ *  or beats it on both generations and effort. `free` is the item-free subset
+ *  of the same result list. */
+function isRedundantReverserRoute(route, free) {
+  return route.usesReverser
+    && free.some(f => f.depth <= route.depth && f.effort <= route.effort);
 }
 
 /**

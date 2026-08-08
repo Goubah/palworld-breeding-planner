@@ -57,6 +57,8 @@ Then open http://localhost:8000. On Windows you can double-click `run-server.bat
 
 It has to be served over HTTP. Opening `index.html` off the filesystem won't work, since ES modules and `fetch()` are both blocked on `file://` origins.
 
+[NOTES.md](NOTES.md) covers how the code is laid out and the mistakes that have already cost a debugging session. Worth reading before changing anything.
+
 ## Tests
 
 Open `tests.html` through the server. 57 tests covering the inheritance math, the breeding table, reachability, gender rules, gender pricing, the solver and how routes are presented. Nothing to install.

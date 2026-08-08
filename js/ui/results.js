@@ -8,12 +8,16 @@ import { getPals, getMeta, palByInternal } from '../data.js';
 import * as store from '../store.js';
 import { attachTooltip, plural, formatEffort } from './shared.js';
 import { renderRouteSteps, renderRouteTree } from './route-views.js';
-import { suppressRedundantReverserRoutes, itemFreeRoutesFirst } from './route-model.js';
+import { suppressRedundantReverserRoutes, redundantReverserRoutes, itemFreeRoutesFirst } from './route-model.js';
 
 let worker = null;
 let statusEl, cancelBtn, listEl, viewToggle;
 let currentRequest = null;
 let lastResult = null, lastMeta = null;
+// Whether the suppressed Reverser routes are expanded. Not a stored setting:
+// it's curiosity about one specific result, not a reading preference like the
+// tree/steps choice.
+let showHidden = false;
 
 function ensureWorker() {
   if (worker) return worker;
@@ -164,6 +168,7 @@ export function runSearch({ targetSpecies, desiredPassives }) {
   currentRequest = { targetSpecies, desiredPassives, ownedEntries };
   lastResult = null;
   lastMeta = null;
+  showHidden = false;
 
   const maleProbBySpecies = getPals().map(p => p.maleProb);
 
@@ -198,12 +203,19 @@ function renderResults(result, request, meta = {}) {
   // the effort gap. What survives is then ordered item-free first, so route 1
   // is the plan most players actually want to run.
   const routes = itemFreeRoutesFirst(suppressRedundantReverserRoutes(result.results));
+  const hidden = redundantReverserRoutes(result.results);
 
   const widened = meta.attempts > 1
     ? ` The search widened to ${meta.finalBeamWidth.toLocaleString()} to find this.`
     : '';
+  // Say how many were held back rather than letting them vanish. The reader
+  // can then decide whether to look, instead of having the decision made for
+  // them by a filter they were never told about.
+  const trimmed = hidden.length > 0
+    ? ` ${plural(hidden.length, 'slower route needing a Pal Reverser is', 'slower routes needing a Pal Reverser are')} not shown.`
+    : '';
   statusEl.textContent = routes.length > 0
-    ? `Found ${plural(routes.length, 'route')} after searching ${plural(result.rounds, 'generation')} and ${plural(result.stateCount, 'candidate Pal')}.${widened}`
+    ? `Found ${plural(routes.length, 'route')} after searching ${plural(result.rounds, 'generation')} and ${plural(result.stateCount, 'candidate Pal')}.${widened}${trimmed}`
     // The search already widened on its own, so telling the reader to raise
     // the beam width would be advice it has taken several times already.
     : `No route found. The search widened to ${plural(meta.finalBeamWidth || 0, 'candidate Pal')} across ${plural(meta.attempts || 1, 'attempt')} without success. Raising "Max breeding generations" in Advanced Settings can help if the target needs more steps; otherwise the passives you want may not be reachable from your current roster.`;
@@ -212,26 +224,77 @@ function renderResults(result, request, meta = {}) {
   viewToggle.sync();
 
   const useTree = store.getSettings().routeView !== 'steps';
+  const view = { desiredPassives: request.desiredPassives, ownedEntries: request.ownedEntries };
 
   routes.forEach((route, idx) => {
-    const card = document.createElement('div');
-    card.className = 'card result-card';
-    const heading = document.createElement('h4');
-    heading.textContent = `Route ${idx + 1} — ${plural(route.depth, 'generation')}, est. ${formatEffort(route.effort)}`;
-    card.appendChild(heading);
-
-    // Routes that need a Pal Reverser and routes that don't are kept as
-    // separate results, so say which this is up front. The time estimate
-    // alone can't carry the decision: farming the item is active play, while
-    // the extra eggs an item-free route costs get batched and hatched
-    // together, and some players would rather bank a scarce item regardless.
-    const reverserTag = document.createElement('div');
-    reverserTag.className = 'route-reverser-tag ' + (route.usesReverser ? 'needs' : 'free');
-    reverserTag.textContent = route.usesReverser ? '⇄ Uses a Pal Reverser' : 'No Pal Reverser needed';
-    card.appendChild(reverserTag);
-
-    const view = { desiredPassives: request.desiredPassives, ownedEntries: request.ownedEntries };
-    card.appendChild(useTree ? renderRouteTree(route, view) : renderRouteSteps(route, view));
-    listEl.appendChild(card);
+    listEl.appendChild(renderRouteCard(route, `Route ${idx + 1}`, useTree, view));
   });
+
+  if (hidden.length > 0) listEl.appendChild(renderHiddenSection(hidden, useTree, view));
+}
+
+/** One result card. Hidden routes use the same renderer as shown ones, so
+ *  revealing them can't produce a differently-built card. */
+function renderRouteCard(route, label, useTree, view, muted = false) {
+  const card = document.createElement('div');
+  card.className = 'card result-card' + (muted ? ' result-card-muted' : '');
+  const heading = document.createElement('h4');
+  heading.textContent = `${label} — ${plural(route.depth, 'generation')}, est. ${formatEffort(route.effort)}`;
+  card.appendChild(heading);
+
+  // Routes that need a Pal Reverser and routes that don't are kept as
+  // separate results, so say which this is up front. The time estimate
+  // alone can't carry the decision: farming the item is active play, while
+  // the extra eggs an item-free route costs get batched and hatched
+  // together, and some players would rather bank a scarce item regardless.
+  const reverserTag = document.createElement('div');
+  reverserTag.className = 'route-reverser-tag ' + (route.usesReverser ? 'needs' : 'free');
+  reverserTag.textContent = route.usesReverser ? '⇄ Uses a Pal Reverser' : 'No Pal Reverser needed';
+  card.appendChild(reverserTag);
+
+  card.appendChild(useTree ? renderRouteTree(route, view) : renderRouteSteps(route, view));
+  return card;
+}
+
+/**
+ * The held-back routes, behind a button.
+ *
+ * Collapsed by default because every route in here is beaten outright by one
+ * above it, so the common case is a reader who doesn't want them. Available
+ * because "trust me, they were worse" is a weaker claim than showing the plan
+ * and letting them check.
+ *
+ * `showHidden` deliberately survives a family-tree/steps switch (that re-renders
+ * from `lastResult`) but resets on a new search, where the old expansion would
+ * be about routes that no longer exist.
+ */
+function renderHiddenSection(hidden, useTree, view) {
+  const wrap = document.createElement('div');
+  wrap.className = 'hidden-routes';
+
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'btn btn-secondary hidden-routes-toggle';
+  btn.textContent = showHidden
+    ? 'Hide them again'
+    : `Show ${plural(hidden.length, 'hidden route')}`;
+  btn.setAttribute('aria-expanded', showHidden ? 'true' : 'false');
+  attachTooltip(btn, 'These need a Pal Reverser and take no fewer generations and no less time than a route above, so there is nothing to gain by running one.');
+  btn.addEventListener('click', () => {
+    showHidden = !showHidden;
+    if (lastResult) renderResults(lastResult, currentRequest, lastMeta);
+  });
+  wrap.appendChild(btn);
+
+  if (showHidden) {
+    const why = document.createElement('p');
+    why.className = 'hidden-routes-why muted';
+    why.textContent = 'Each of these needs a Pal Reverser and is no quicker than a route above it, so it costs an item and buys nothing. They are here so you can check that for yourself.';
+    wrap.appendChild(why);
+
+    hidden.forEach((route, idx) => {
+      wrap.appendChild(renderRouteCard(route, `Hidden route ${idx + 1}`, useTree, view, true));
+    });
+  }
+  return wrap;
 }

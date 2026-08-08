@@ -24,7 +24,7 @@ import { loadGameData, getPals, getPassives, getMeta, palByName } from './js/dat
 import { childOf } from './js/breeding.js';
 import { outcomeDistribution, popcount, choose, inheritCountDistribution, randomAddDistribution } from './js/probability.js';
 import { runSolver, checkPreflight, reachableSpeciesClosure, feasibleGenderAssignments, pairGenderInfo, dominates } from './js/solver.js';
-import { collectOwnedLeaves, countOwnedUses, desiredFirst, flattenSteps, layoutTree, leafStateKey, suppressRedundantReverserRoutes, itemFreeRoutesFirst } from './js/ui/route-model.js';
+import { collectOwnedLeaves, countOwnedUses, desiredFirst, flattenSteps, layoutTree, leafStateKey, suppressRedundantReverserRoutes, redundantReverserRoutes, itemFreeRoutesFirst } from './js/ui/route-model.js';
 
 const ctx = {};
 
@@ -908,6 +908,51 @@ test('suppressRedundantReverserRoutes: preserves input order', () => {
   assertEqual(out.length, 2);
   assertEqual(out[0], a, 'first in stays first out');
   assertEqual(out[1], c);
+});
+
+test('redundantReverserRoutes: returns exactly what the filter drops', () => {
+  // The UI reports a count of hidden routes and offers to show them, so the
+  // two functions have to agree on the same set. They share one predicate,
+  // and this pins that they partition the input: nothing lost, nothing in
+  // both, and the totals add up.
+  const cases = [
+    [routeOf(5, 1076.29, false), routeOf(5, 1086.29, true)],
+    [routeOf(4, 1464.84, false), routeOf(4, 872.71, true)],
+    [routeOf(4, 538.43, true)],
+    [routeOf(2, 500, false), routeOf(4, 80, false), routeOf(3, 90, true), routeOf(5, 600, true)],
+    [routeOf(1, 20.83, false), routeOf(1, 23.33, true), routeOf(1, 23.33, true)],
+    [],
+  ];
+  for (const routes of cases) {
+    const shown = suppressRedundantReverserRoutes(routes);
+    const hidden = redundantReverserRoutes(routes);
+    assertEqual(shown.length + hidden.length, routes.length,
+      'every route must land in exactly one of the two sets');
+    for (const r of routes) {
+      const inShown = shown.includes(r), inHidden = hidden.includes(r);
+      assert(inShown !== inHidden, 'a route must be in one set, never both or neither');
+    }
+    for (const r of hidden) {
+      assertEqual(r.usesReverser, true, 'only Reverser routes are ever hidden');
+    }
+  }
+});
+
+test('redundantReverserRoutes: hides both variants when a target has several', () => {
+  // Warsect on the real roster returns one item-free route and two Reverser
+  // ones, both beaten. This is why the count in the status line is worth
+  // showing: the trim is bigger than the two-route case suggests.
+  const free = routeOf(1, 20.83, false);
+  const routes = [free, routeOf(1, 23.33, true), routeOf(1, 25.0, true)];
+  assertEqual(redundantReverserRoutes(routes).length, 2, 'both dominated variants are held back');
+  assertEqual(suppressRedundantReverserRoutes(routes).length, 1);
+});
+
+test('redundantReverserRoutes: hides nothing when the Reverser route earns its place', () => {
+  assertEqual(redundantReverserRoutes([routeOf(4, 1464.84, false), routeOf(4, 872.71, true)]).length, 0,
+    'a cheaper Reverser route is not hidden, so there is nothing to report');
+  assertEqual(redundantReverserRoutes([routeOf(4, 538.43, true)]).length, 0,
+    'the only route there is can never be hidden');
 });
 
 test('itemFreeRoutesFirst: the item-free route leads even when a Reverser route is faster', () => {
