@@ -8,6 +8,7 @@ import { getPals, getMeta, palByInternal } from '../data.js';
 import * as store from '../store.js';
 import { attachTooltip, plural, formatEffort } from './shared.js';
 import { renderRouteSteps, renderRouteTree } from './route-views.js';
+import { suppressRedundantReverserRoutes } from './route-model.js';
 
 let worker = null;
 let statusEl, cancelBtn, listEl, viewToggle;
@@ -35,13 +36,16 @@ export function initResultsTab(container) {
   statusEl.textContent = 'Pick a target Pal above, then click "Find Breeding Routes".';
   header.appendChild(statusEl);
 
-  // Standing explanation of what the search returns. The solver produces at
-  // most two results, split by whether the plan needs a Pal Reverser, so say
-  // that plainly rather than leaving people to wonder why a list of five
-  // never appears.
+  // Standing explanation of what the search returns. The count varies more
+  // than it looks: results are one per surviving target state, which differ by
+  // junk count as well as by Reverser use. A four-passive search fills every
+  // slot, forcing junk to 0, so it really does return at most two -- but three
+  // desired passives leaves room for junk to vary, and Robinquill Terra on the
+  // 252-Pal roster returns five. Promising a specific number here would be
+  // wrong as often as it was right.
   const scopeEl = document.createElement('p');
   scopeEl.className = 'results-scope muted';
-  scopeEl.textContent = 'The search returns the fastest routes it can find, including one that needs a Pal Reverser and one that does not, where both exist. All of them use only the Pals in your roster.';
+  scopeEl.textContent = 'The search returns the fastest routes it can find, all of them using only the Pals in your roster. A route that needs a Pal Reverser is listed only when the item actually saves you time or a generation.';
   header.appendChild(scopeEl);
 
   viewToggle = createViewToggle();
@@ -188,21 +192,27 @@ function renderResults(result, request, meta = {}) {
   lastMeta = meta;
   listEl.innerHTML = '';
 
+  // A Reverser route the item-free one already beats on both generations and
+  // time is not a second option, it's the same plan with a chore attached.
+  // See suppressRedundantReverserRoutes for why this can't be a threshold on
+  // the effort gap.
+  const routes = suppressRedundantReverserRoutes(result.results);
+
   const widened = meta.attempts > 1
     ? ` The search widened to ${meta.finalBeamWidth.toLocaleString()} to find this.`
     : '';
-  statusEl.textContent = result.results.length > 0
-    ? `Found ${plural(result.results.length, 'route')} after searching ${plural(result.rounds, 'generation')} and ${plural(result.stateCount, 'candidate Pal')}.${widened}`
+  statusEl.textContent = routes.length > 0
+    ? `Found ${plural(routes.length, 'route')} after searching ${plural(result.rounds, 'generation')} and ${plural(result.stateCount, 'candidate Pal')}.${widened}`
     // The search already widened on its own, so telling the reader to raise
     // the beam width would be advice it has taken several times already.
     : `No route found. The search widened to ${plural(meta.finalBeamWidth || 0, 'candidate Pal')} across ${plural(meta.attempts || 1, 'attempt')} without success. Raising "Max breeding generations" in Advanced Settings can help if the target needs more steps; otherwise the passives you want may not be reachable from your current roster.`;
 
-  viewToggle.el.hidden = result.results.length === 0;
+  viewToggle.el.hidden = routes.length === 0;
   viewToggle.sync();
 
   const useTree = store.getSettings().routeView !== 'steps';
 
-  result.results.forEach((route, idx) => {
+  routes.forEach((route, idx) => {
     const card = document.createElement('div');
     card.className = 'card result-card';
     const heading = document.createElement('h4');

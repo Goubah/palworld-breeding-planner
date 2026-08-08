@@ -4,6 +4,41 @@
 // turn what comes back into elements.
 
 /**
+ * Drops Reverser routes that an item-free route already beats outright.
+ *
+ * The solver keeps Reverser and Reverser-free routes as separate results on
+ * purpose -- `dominates` in solver.js refuses to let one collapse the other
+ * mid-search, so the best of each kind survives to be compared as a finished
+ * plan. That split only has value when the item buys something. A route that
+ * needs a Pal Reverser AND takes no fewer generations AND costs no less time
+ * is strictly worse: there is no reading of the trade-off under which a player
+ * picks it, so it is scrolling with no choice at the end of it.
+ *
+ * Pareto dominance on (depth, effort), not a threshold on the effort gap. The
+ * obvious-looking rule -- hide it when the two routes differ by less than the
+ * 2.5 min Reverser penalty -- does not work, because the penalty does not
+ * arrive at the root as 2.5. Gender setup is a function of a branch's own
+ * effort, so a penalty deep in the tree is re-charged at every level above it.
+ * Measured on the 252-Pal roster, Frostallion Noct (Eternal Engine, Nimble,
+ * Swift, Runner): 2.5 at the leaf becomes 5.0 one level up and 10.0 at the
+ * root. Across 9 searches that returned a Reverser route, the threshold rule
+ * caught 0 of the 7 junk ones; this one catches all 7.
+ *
+ * Comparing finished efforts also keeps the routes worth keeping. Lyleen Noct
+ * (same passives) has a Reverser route 592 min CHEAPER than its item-free
+ * sibling, and Katress Ignis has no item-free route at all. Both survive here.
+ *
+ * The item-free route is never dropped, even when a Reverser route beats it on
+ * both axes. Needing no item is a real advantage the effort number does not
+ * carry, so it always has a reason to be on screen.
+ */
+export function suppressRedundantReverserRoutes(routes) {
+  const free = routes.filter(r => !r.usesReverser);
+  return routes.filter(r => !r.usesReverser
+    || !free.some(f => f.depth <= r.depth && f.effort <= r.effort));
+}
+
+/**
  * Identity of an owned leaf as the SOLVER sees it: species, which desired
  * passives it carries, how much junk, and its gender. Two leaves sharing this
  * key came from the same bucket of interchangeable roster Pals.

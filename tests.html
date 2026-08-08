@@ -24,7 +24,7 @@ import { loadGameData, getPals, getPassives, getMeta, palByName } from './js/dat
 import { childOf } from './js/breeding.js';
 import { outcomeDistribution, popcount, choose, inheritCountDistribution, randomAddDistribution } from './js/probability.js';
 import { runSolver, checkPreflight, reachableSpeciesClosure, feasibleGenderAssignments, pairGenderInfo, dominates } from './js/solver.js';
-import { collectOwnedLeaves, countOwnedUses, desiredFirst, flattenSteps, layoutTree, leafStateKey } from './js/ui/route-model.js';
+import { collectOwnedLeaves, countOwnedUses, desiredFirst, flattenSteps, layoutTree, leafStateKey, suppressRedundantReverserRoutes } from './js/ui/route-model.js';
 
 const ctx = {};
 
@@ -789,6 +789,125 @@ test('layoutTree: leaves take distinct rows and each pairing sits between its pa
     assertClose(rec.row, (a.row + b.row) / 2, 1e-9,
       'a bred node must sit midway between its two parents, or the connectors stop reading as a pedigree');
   }
+});
+
+// --- redundant Reverser routes -------------------------------------------
+// Figures are real, measured on the user's 252-Pal roster. They are fixtures
+// for the filter's decision, not assertions about what the solver costs, so a
+// solver change cannot make these stale.
+
+const routeOf = (depth, effort, usesReverser) => ({ depth, effort, usesReverser });
+
+test('suppressRedundantReverserRoutes: hides a Reverser route the item-free one already beats', () => {
+  // Frostallion Noct (Eternal Engine, Nimble, Swift, Runner). Same depth, and
+  // the Reverser route costs 10 min more for an item on top.
+  const free = routeOf(5, 1076.29, false);
+  const rev = routeOf(5, 1086.29, true);
+  const out = suppressRedundantReverserRoutes([free, rev]);
+  assertEqual(out.length, 1, 'the dominated Reverser route must go');
+  assertEqual(out[0], free, 'the surviving route is the item-free one');
+});
+
+test('suppressRedundantReverserRoutes: a threshold on the effort gap would not do this job', () => {
+  // Why the rule is dominance and not "differs by less than the 2.5 min
+  // Reverser penalty". Gender setup is a function of a branch's own effort, so
+  // a penalty deep in the tree is re-charged at every level above it and never
+  // reaches the root as 2.5. These are the seven junk Reverser routes measured
+  // across the roster, with their real root-level gaps.
+  const gaps = [
+    ['Frostallion Noct', 5, 1076.29, 5, 1086.29],
+    ['Robinquill Terra', 0, 0.00, 1, 40.96],
+    ['Blazamut', 2, 69.44, 2, 78.61],
+    ['Beakon', 2, 57.14, 2, 62.14],
+    ['Ragnahawk', 3, 148.18, 3, 153.18],
+    ['Suzaku', 2, 57.14, 2, 62.14],
+    ['Warsect', 1, 20.83, 1, 23.33],
+  ];
+  const REVERSER_PENALTY = 2.5;
+  let thresholdWouldCatch = 0;
+  for (const [name, fd, fe, rd, re] of gaps) {
+    const out = suppressRedundantReverserRoutes([routeOf(fd, fe, false), routeOf(rd, re, true)]);
+    assertEqual(out.length, 1, `${name}: dominance must hide the Reverser route`);
+    assertEqual(out[0].usesReverser, false, `${name}: the item-free route must survive`);
+    if (re - fe < REVERSER_PENALTY) thresholdWouldCatch++;
+  }
+  assertEqual(thresholdWouldCatch, 0,
+    'the "differs by less than the penalty" rule catches none of these, which is why it is not the rule');
+});
+
+test('suppressRedundantReverserRoutes: keeps a Reverser route that genuinely saves time', () => {
+  // Lyleen Noct, same passives: the Reverser route is 592 min CHEAPER at the
+  // same depth. Suppressing this would hide the better plan.
+  const free = routeOf(4, 1464.84, false);
+  const rev = routeOf(4, 872.71, true);
+  const out = suppressRedundantReverserRoutes([free, rev]);
+  assertEqual(out.length, 2, 'a Reverser route that beats the item-free one must stay');
+  assert(out.includes(rev) && out.includes(free), 'both routes remain on offer');
+});
+
+test('suppressRedundantReverserRoutes: keeps a Reverser route when it is the only one', () => {
+  // Katress Ignis returns no item-free route at all. With nothing to compare
+  // against there is nothing to suppress, or the search would look like it
+  // failed.
+  const rev = routeOf(4, 538.43, true);
+  assertEqual(suppressRedundantReverserRoutes([rev]).length, 1);
+  assertEqual(suppressRedundantReverserRoutes([]).length, 0, 'no routes in, no routes out');
+});
+
+test('suppressRedundantReverserRoutes: fewer generations saves a costlier Reverser route', () => {
+  // Dominance is on both axes. A Reverser route that costs more time but takes
+  // a generation less is a real trade, so effort alone must not decide it.
+  const free = routeOf(4, 100, false);
+  const rev = routeOf(3, 130, true);
+  assertEqual(suppressRedundantReverserRoutes([free, rev]).length, 2,
+    'a shallower Reverser route survives even when it costs more time');
+});
+
+test('suppressRedundantReverserRoutes: an exact tie goes to the item-free route', () => {
+  // Same depth, same effort. The item is then pure cost, so the Reverser route
+  // has nothing to offer. Matches the solver, where ties already settle toward
+  // needing no item.
+  const free = routeOf(3, 250, false);
+  const out = suppressRedundantReverserRoutes([free, routeOf(3, 250, true)]);
+  assertEqual(out.length, 1, 'a tie is not a choice');
+  assertEqual(out[0], free);
+});
+
+test('suppressRedundantReverserRoutes: never drops an item-free route', () => {
+  // Even beaten on both axes, needing no item is an advantage the effort
+  // number does not carry, so it always stays on screen.
+  const free = routeOf(5, 900, false);
+  const rev = routeOf(3, 100, true);
+  const out = suppressRedundantReverserRoutes([free, rev]);
+  assertEqual(out.length, 2, 'the item-free route survives being beaten outright');
+  assert(out.includes(free));
+});
+
+test('suppressRedundantReverserRoutes: judges each Reverser route against every free one', () => {
+  // The result list is not always two long. Results are one per surviving
+  // target state, which differ by junk as well as by Reverser use -- a
+  // four-passive search forces junk to 0 and really does cap at two, but
+  // Robinquill Terra (three passives) returns five. A pairwise
+  // first-free-vs-first-Reverser check would be wrong on those.
+  const freeShallow = routeOf(2, 500, false);
+  const freeCheap = routeOf(4, 80, false);
+  const survivor = routeOf(3, 90, true);   // beaten by neither: shallower than
+                                           // freeCheap, cheaper than freeShallow
+  const doomed = routeOf(5, 600, true);    // freeCheap beats it on both axes
+  const out = suppressRedundantReverserRoutes([freeShallow, freeCheap, survivor, doomed]);
+  assertEqual(out.length, 3, 'only the route dominated by SOME free route is dropped');
+  assert(out.includes(survivor), 'a Reverser route beaten by no single free route stays');
+  assert(!out.includes(doomed), 'domination by a non-adjacent free route must still count');
+});
+
+test('suppressRedundantReverserRoutes: preserves input order', () => {
+  // renderResults numbers the cards "Route 1", "Route 2" straight from this
+  // list, so the solver's depth-then-effort ranking has to come through intact.
+  const a = routeOf(2, 10, false), b = routeOf(2, 20, true), c = routeOf(3, 15, false);
+  const out = suppressRedundantReverserRoutes([a, c, b]);
+  assertEqual(out.length, 2);
+  assertEqual(out[0], a, 'first in stays first out');
+  assertEqual(out[1], c);
 });
 
 const reportEl = document.getElementById('report');
