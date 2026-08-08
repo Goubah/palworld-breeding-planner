@@ -45,7 +45,7 @@ export function initResultsTab(container) {
   // wrong as often as it was right.
   const scopeEl = document.createElement('p');
   scopeEl.className = 'results-scope muted';
-  scopeEl.textContent = 'The search returns the fastest routes it can find, all of them using only the Pals in your roster. Routes needing no Pal Reverser are listed first, and one that needs the item appears only when it actually saves you time or a generation.';
+  scopeEl.textContent = 'The search returns the fastest routes it can find, all of them using only the Pals in your roster. Routes needing no Pal Reverser are listed first. One that needs the item is listed only when it saves you time or a generation, or when there is no item-free route at all.';
   header.appendChild(scopeEl);
 
   viewToggle = createViewToggle();

@@ -41,10 +41,13 @@ what the patch added before moving on.
 A handful of tests assert *exact counts for the current patch*, and will
 correctly fail after a data refresh until updated to match:
 
-- `tests.html:39` — `assertEqual(ctx.pals.length, 299)`
-- `tests.html:178` — `assertEqual(ctx.passives.length, 115, ...)`
-- `tests.html:179` — `assertEqual(nonRandom.length, 30, ...)`
-- `tests.html:189` — `assertEqual(reached.size, 202, ...)` (Melpaca + Lapiron
+Line numbers drift every time a test is added, so search for the assertion
+rather than trusting the number if it doesn't land where you expect.
+
+- `tests.html:40` — `assertEqual(ctx.pals.length, 299)`
+- `tests.html:179` — `assertEqual(ctx.passives.length, 115, ...)`
+- `tests.html:180` — `assertEqual(nonRandom.length, 30, ...)`
+- `tests.html:190` — `assertEqual(reached.size, 202, ...)` (Melpaca + Lapiron
   reachability closure) — re-derive this the same way it was originally
   verified: an independent Python pass over the fresh `data/breeding.bin`
   (see the "Verified game mechanics" section of this project's build

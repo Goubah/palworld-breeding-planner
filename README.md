@@ -59,7 +59,7 @@ It has to be served over HTTP. Opening `index.html` off the filesystem won't wor
 
 ## Tests
 
-Open `tests.html` through the server. 44 tests covering the inheritance math, the breeding table, reachability, gender rules, gender pricing and the solver. Nothing to install.
+Open `tests.html` through the server. 57 tests covering the inheritance math, the breeding table, reachability, gender rules, gender pricing, the solver and how routes are presented. Nothing to install.
 
 ## Regenerating the data
 
