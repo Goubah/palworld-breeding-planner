@@ -326,6 +326,13 @@ export function initRosterTab(container) {
     } else if (sortBy === 'passives') {
       const count = x => (Array.isArray(x.pal.passiveInternalNames) ? x.pal.passiveInternalNames.length : 0);
       shown.sort((a, b) => count(b) - count(a) || a.species.name.localeCompare(b.species.name));
+    } else if (sortBy === 'added') {
+      // store.getRoster() is already chronological -- addPal/duplicatePal both
+      // push onto the end and nothing ever reorders it -- so newest-first is
+      // just the reverse of storage order. `shown` preserves that order via
+      // map+filter above, so a plain reverse is enough; no timestamp field
+      // exists or is needed.
+      shown.reverse();
     }
 
     countEl.textContent = shown.length === roster.length
