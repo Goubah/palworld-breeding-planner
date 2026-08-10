@@ -21,7 +21,7 @@
 <script type="module">
 import { test, runAll, assert, assertEqual, assertClose } from './js/testharness.js';
 import { loadGameData, getPals, getPassives, getMeta, palByName } from './js/data.js';
-import { childOf } from './js/breeding.js';
+import { childOf, isSelfBredOnly } from './js/breeding.js';
 import { outcomeDistribution, popcount, choose, inheritCountDistribution, randomAddDistribution } from './js/probability.js';
 import { runSolver, checkPreflight, reachableSpeciesClosure, feasibleGenderAssignments, pairGenderInfo, dominates } from './js/solver.js';
 import { collectOwnedLeaves, countOwnedUses, desiredFirst, flattenSteps, layoutTree, leafStateKey, suppressRedundantReverserRoutes, redundantReverserRoutes, itemFreeRoutesFirst } from './js/ui/route-model.js';
@@ -70,6 +70,50 @@ test('self-pairs breed true (Lamball+Lamball, Jetragon+Jetragon)', () => {
   assert(jetragon, 'Jetragon must exist in data');
   assertEqual(childOf(lamball.i, null, lamball.i, null), lamball.i);
   assertEqual(childOf(jetragon.i, null, jetragon.i, null), jetragon.i);
+});
+
+test('isSelfBredOnly: Frostallion, Jetragon and Shadowbeak are only ever bred from themselves', () => {
+  for (const name of ['Frostallion', 'Jetragon', 'Shadowbeak']) {
+    const pal = palByName(name);
+    assert(pal, `${name} must exist in data`);
+    assert(isSelfBredOnly(pal.i), `${name} should be self-bred-only`);
+  }
+});
+
+test('isSelfBredOnly: Lamball breeds true with itself but is NOT self-bred-only, since other pairs also reach it', () => {
+  const lamball = palByName('Lamball');
+  assert(lamball, 'Lamball must exist in data');
+  assert(!isSelfBredOnly(lamball.i), 'Lamball is reachable from pairs other than itself, so it should not be flagged');
+});
+
+test('isSelfBredOnly: exactly 26 of 299 species have no producing pair but themselves', () => {
+  // Verified independently against a fresh data/breeding.bin AND meta.json's
+  // genderSpecificRules with a Python pass over every canonical pair plus
+  // both override rules (2026-08-09), the same method used for the
+  // 202-species reachability count above. The raw table alone gives 28 --
+  // it's 26 only once the two gender-override entries are folded in, since
+  // Katress Ignis and Wixen Noct each have a second producing pair
+  // (Katress x Wixen, gender-locked) that the gender-agnostic table can't
+  // represent. Re-derive after a data refresh rather than assuming this
+  // number still holds -- see tools/UPDATING.md.
+  let count = 0;
+  for (const pal of ctx.pals) {
+    if (isSelfBredOnly(pal.i)) count++;
+  }
+  assertEqual(count, 26, 'expected 26 species whose only producing pair is themselves');
+});
+
+test('isSelfBredOnly: Katress Ignis and Wixen Noct are NOT self-bred-only, despite the gender-agnostic table showing only a self-pair', () => {
+  // The generic table has no entry at all for Katress+Wixen (it's the one
+  // pair covered only by gender-specific overrides -- see the "no unset
+  // entries" test above), so a scan of the table alone wrongly counts both
+  // species as self-bred-only. They are each also reachable from Katress x
+  // Wixen under one gender assignment, which isSelfBredOnly must account for.
+  const katressIgnis = palByName('Katress Ignis');
+  const wixenNoct = palByName('Wixen Noct');
+  assert(katressIgnis && wixenNoct, 'Katress Ignis and Wixen Noct must exist in data');
+  assert(!isSelfBredOnly(katressIgnis.i), 'Katress Ignis is also reachable from Katress x Wixen');
+  assert(!isSelfBredOnly(wixenNoct.i), 'Wixen Noct is also reachable from Katress x Wixen');
 });
 
 const fixtures = [

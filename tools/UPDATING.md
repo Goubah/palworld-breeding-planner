@@ -52,6 +52,14 @@ rather than trusting the number if it doesn't land where you expect.
   verified: an independent Python pass over the fresh `data/breeding.bin`
   (see the "Verified game mechanics" section of this project's build
   history for the method), not a guess.
+- `tests.html` — `assertEqual(count, 26, ...)` (species whose only producing
+  pair is themselves, i.e. `isSelfBredOnly` in `js/breeding.js`) — re-derive
+  with the same kind of independent pass over the fresh table AND
+  `meta.json`'s `genderSpecificRules`: for every species, collect every pair
+  that produces it (table entries plus gender-override rules) and check
+  whether any pair is NOT that species with itself. The table alone is not
+  enough -- Katress Ignis and Wixen Noct each have a second producing pair
+  that only exists as a gender override, so a table-only scan overcounts by 2.
 
 Don't just search-and-replace with a hoped-for number — derive the real one
 from the fresh data first, the same way each of these was originally pinned.

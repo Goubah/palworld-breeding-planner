@@ -14,7 +14,8 @@
 // restatements and ten collapse toggles -- 1147px tall and still scrolling
 // sideways. The indentation became the structure instead of the Pals.
 
-import { getPals, passiveByInternal } from '../data.js';
+import { getPals, palByInternal, passiveByInternal } from '../data.js';
+import { isSelfBredOnly } from '../breeding.js';
 import { renderPalIcon, passiveTierClass, attachTooltip, formatEffort } from './shared.js';
 import { collectOwnedLeaves, countOwnedUses, desiredFirst, flattenSteps, layoutTree, leafStateKey } from './route-model.js';
 
@@ -54,6 +55,35 @@ function passiveChip(text, className, tooltip) {
 /** The roster entry a solver leaf refers to. See the ownedRefs note in results.js. */
 function entryFor(node, ownedEntries) {
   return node.ownedRefs && node.ownedRefs.length ? ownedEntries[node.ownedRefs[0]] : null;
+}
+
+/** How many roster entries (any gender or passives) are this species. */
+function ownedSpeciesCount(speciesIdx, ownedEntries) {
+  let count = 0;
+  for (const entry of ownedEntries) {
+    const species = palByInternal(entry.speciesInternal);
+    if (species && species.i === speciesIdx) count++;
+  }
+  return count;
+}
+
+/**
+ * A note (and tooltip) for an owned leaf the player can never breed a second
+ * of, or null when it doesn't apply. Two conditions, both required:
+ * isSelfBredOnly is a fact about the species (its only producing pair is
+ * itself + itself); the roster count is a fact about THIS player -- someone
+ * who owns two such Pals genuinely can pair them for a third, so the warning
+ * would be wrong for them. See js/breeding.js:isSelfBredOnly.
+ */
+function irreplaceableNote(node, ownedEntries) {
+  if (node.type !== 'owned') return null;
+  if (!isSelfBredOnly(node.species)) return null;
+  if (ownedSpeciesCount(node.species, ownedEntries) > 1) return null;
+  const name = speciesOf(node).name;
+  return {
+    text: "can't breed a second",
+    tooltip: `${name}'s only known breeding pair is two ${name}s, and you own just one. Breeding will never give you a second -- this one is the only copy this plan can ever use.`,
+  };
 }
 
 /**
@@ -203,11 +233,17 @@ export function renderRouteTree(route, { desiredPassives, ownedEntries }) {
       });
       tooltips.push('Any of these works. They are interchangeable here:\n' + alternatives.join('\n'));
     }
+    const irreplaceable = irreplaceableNote(node, ownedEntries);
+    if (irreplaceable) {
+      notes.push(irreplaceable.text);
+      tooltips.push(irreplaceable.tooltip);
+    }
     if (notes.length) {
       const sub = document.createElement('div');
       sub.className = 'route-tree-sub'
         + (node.needsReversal ? ' reverser' : '')
-        + (node.type === 'owned' && node.ownedRefs.length > 1 ? ' choice' : '');
+        + (node.type === 'owned' && node.ownedRefs.length > 1 ? ' choice' : '')
+        + (irreplaceable ? ' irreplaceable' : '');
       sub.style.left = x(rec) + 'px';
       sub.style.top = (y(rec) + NODE_H + 1) + 'px';
       sub.style.maxWidth = NODE_W + 'px';
@@ -383,9 +419,16 @@ function renderOperand(node, fromStep, { desiredNames, desiredPassives, ownedEnt
       tooltips.push('Any of these works. They are interchangeable here:\n' + alternatives.join('\n'));
     }
   }
+  const irreplaceable = irreplaceableNote(node, ownedEntries);
+  if (irreplaceable) {
+    notes.push(irreplaceable.text);
+    tooltips.push(irreplaceable.tooltip);
+  }
   if (notes.length) {
     const note = document.createElement('span');
-    note.className = 'route-step-operand-note' + (node.needsReversal ? ' reverser' : '');
+    note.className = 'route-step-operand-note'
+      + (node.needsReversal ? ' reverser' : '')
+      + (irreplaceable ? ' irreplaceable' : '');
     note.textContent = notes.join(' · ');
     if (tooltips.length) attachTooltip(note, tooltips.join('\n\n'));
     el.appendChild(note);
