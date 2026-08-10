@@ -28,6 +28,22 @@ when the game data is regenerated.
 (MIT) and [paldb.cc](https://paldb.cc/) belongs in both the README and the site
 footer, and the disclaimer that this is an unofficial fan tool stays with it.
 
+**`effort` is a sequential sum, and deliberately not a wall-clock estimate.** It
+adds every step's cost, which models running the plan one pairing at a time. A
+player with several breeding ranches can run independent branches at once, so
+their real elapsed time is closer to the tree's critical path. Ranking by that
+instead was measured against a real 293-Pal roster and rejected: no route the
+solver produces can occupy more than **2** ranches at once, the ranking changed
+on 1 of 13 targets (by 5.83 min, on a route needing a Pal Reverser), and the
+saving is 0% on the many routes that are pure chains. The reason it barely
+moves is that the final pairing dominates — on one route it is 64% of the
+total, is shared by every variant, and cannot be parallelised. Switching
+metrics is also not a matter of swapping the sum for a max: gender setup is
+17-30% of a route's effort and is derived from a parent's *cumulative
+sequential* effort, so it would have to be re-derived, and that is exactly the
+monotonicity `pruneDominated` depends on (see below). Treat `effort` as what it
+is: a comparison metric between routes, not a prediction of your evening.
+
 ## Layout
 
 | path | role |
