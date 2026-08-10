@@ -92,6 +92,17 @@ fail until `pairGenderInfo` tries to call it, several frames deeper. Relevant
 whenever `runSolver` is called directly (bypassing the worker), e.g. to build
 a synthetic scenario in a test or a scratch script.
 
+**Species reachability alone doesn't mean a route exists.** `checkPreflight`
+used to treat "already own it" (`minGenerations === 0`) as always safe to
+search from. It isn't: a self-bred-only species (`isSelfBredOnly` in
+`breeding.js` — its only producing pair is itself) owned exactly once can
+never get a second individual, so combining passives onto a fresh one is
+impossible even though the species itself is trivially "reachable." Found via
+a live search (Jetragon, one owned) that ran a real ~20s escalating search
+before failing. `checkPreflight` now also returns `combiningImpossible` for
+this exact shape and folds it into `blocked`; owning two is NOT this case,
+since pairing them is a real route.
+
 ### Display
 
 **`ownedRefs` index into the `ownedPals` array the solver was given, not into
@@ -131,6 +142,15 @@ produces a test that silently proves nothing.
 nested `import` statements, so an edit that is definitely on disk can behave as
 though it never happened. Use a hard reload, or serve on a port that hasn't been
 used yet in this session.
+
+**A `<select>`'s option list and the code reading it can drift silently.**
+`roster.js`'s sort dropdown offered "Recently added" (`value="added"`) for
+who knows how long with no `else if (sortBy === 'added')` branch in
+`renderList()` -- it just fell through and rendered unsorted, which happened
+to look plausible rather than obviously broken. No error, no warning, just
+the wrong order. Found by a full QA pass, not code review. When adding an
+option to a `<select>` that drives a branch elsewhere, grep for every
+existing branch on that value, not just add the option.
 
 ## Writing UI text
 
