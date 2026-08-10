@@ -36,7 +36,7 @@
 // bound on well-played execution rather than an exact cost. Every term in
 // them is a species gender ratio out of the game data; nothing is tuned.
 
-import { childOf } from './breeding.js';
+import { childOf, isSelfBredOnly } from './breeding.js';
 import { cachedOutcomeDistribution } from './probability.js';
 
 export const DEFAULTS = {
@@ -186,6 +186,19 @@ export function reachableSpeciesDepths(seedSpeciesIndices, genderRules = []) {
  * passive that can ALSO never be randomly rolled (e.g. Legend, Lucky) --
  * otherwise it's a soft "unlikely" warning, since the random-add step could
  * still introduce it.
+ *
+ * `combiningImpossible` catches a case the two checks above miss entirely:
+ * the target species is already owned, but is self-bred-only (its only
+ * producing pair is two of itself -- see isSelfBredOnly), the roster holds
+ * exactly one, and that one doesn't already carry every desired passive. A
+ * fresh individual combining the missing passives can never be bred -- there
+ * is no second parent to pair it with -- so "run the search anyway" is a
+ * guaranteed dead end, not just an unlikely one. Found live: searching
+ * Jetragon (self-bred-only, one owned) for a passive it lacked burned ~20s
+ * of escalating retries before reporting no route, for a reason the old
+ * preflight never could have surfaced since it never looked at per-species
+ * roster counts. Owning two or more is NOT this case -- pairing them is a
+ * real, biddable route, so this only fires at exactly one.
  */
 export function checkPreflight({ ownedPals, targetSpeciesIdx, desiredPassiveNames, passiveInfoByName, genderRules, maxSteps = Infinity }) {
   const depths = reachableSpeciesDepths(ownedPals.map(p => p.speciesIdx), genderRules);
@@ -203,6 +216,15 @@ export function checkPreflight({ ownedPals, targetSpeciesIdx, desiredPassiveName
     return { internalName: name, name: info ? info.name : name, status };
   });
 
+  let combiningImpossible = false;
+  if (minGenerations === 0 && desiredPassiveNames.length > 0 && isSelfBredOnly(targetSpeciesIdx)) {
+    const ownedOfSpecies = ownedPals.filter(p => p.speciesIdx === targetSpeciesIdx);
+    if (ownedOfSpecies.length === 1) {
+      const hasAll = desiredPassiveNames.every(n => ownedOfSpecies[0].passiveInternalNames.includes(n));
+      combiningImpossible = !hasAll;
+    }
+  }
+
   return {
     speciesReachable,
     reachableWithinSteps,
@@ -210,7 +232,8 @@ export function checkPreflight({ ownedPals, targetSpeciesIdx, desiredPassiveName
     maxSteps,
     reachableCount: depths.size,
     passiveChecks,
-    blocked: !reachableWithinSteps || passiveChecks.some(c => c.status === 'impossible'),
+    combiningImpossible,
+    blocked: !reachableWithinSteps || passiveChecks.some(c => c.status === 'impossible') || combiningImpossible,
   };
 }
 

@@ -341,6 +341,75 @@ test('pre-flight: a desired non-random passive (Legend) nobody owns is impossibl
   assertEqual(pre.blocked, true);
 });
 
+test('pre-flight: owning exactly one self-bred-only Pal missing a desired passive blocks combining, not just an unlikely warning', () => {
+  // Jetragon's only producing pair is two Jetragons (isSelfBredOnly). Owning
+  // one with a passive it lacks looks identical to any other "already own
+  // it, missing a passive" case on the passiveChecks alone -- both would say
+  // "unlikely" or "ok" there -- but no second Jetragon exists to pair with,
+  // so a fresh combined one can never be bred. Found live: this used to run
+  // a real ~20s escalating search before failing.
+  const jetragon = palByName('Jetragon');
+  const swift = ctx.passives.find(p => p.name === 'Swift');
+  assert(jetragon && swift, 'fixture pal/passive must exist');
+  const pre = checkPreflight({
+    ownedPals: [{ speciesIdx: jetragon.i, gender: 'MALE', passiveInternalNames: [] }],
+    targetSpeciesIdx: jetragon.i,
+    desiredPassiveNames: [swift.internalName],
+    passiveInfoByName: (n) => ctx.passives.find(p => p.internalName === n),
+    genderRules: ctx.meta.genderSpecificRules,
+  });
+  assertEqual(pre.combiningImpossible, true);
+  assertEqual(pre.blocked, true);
+});
+
+test('pre-flight: combining is NOT impossible when the single owned self-bred-only Pal already has every desired passive', () => {
+  const jetragon = palByName('Jetragon');
+  const swift = ctx.passives.find(p => p.name === 'Swift');
+  assert(jetragon && swift, 'fixture pal/passive must exist');
+  const pre = checkPreflight({
+    ownedPals: [{ speciesIdx: jetragon.i, gender: 'MALE', passiveInternalNames: [swift.internalName] }],
+    targetSpeciesIdx: jetragon.i,
+    desiredPassiveNames: [swift.internalName],
+    passiveInfoByName: (n) => ctx.passives.find(p => p.internalName === n),
+    genderRules: ctx.meta.genderSpecificRules,
+  });
+  assertEqual(pre.combiningImpossible, false, 'already having every desired passive needs no fresh individual at all');
+  assertEqual(pre.blocked, false);
+});
+
+test('pre-flight: combining is NOT impossible when two of the self-bred-only Pal are owned', () => {
+  const jetragon = palByName('Jetragon');
+  const swift = ctx.passives.find(p => p.name === 'Swift');
+  assert(jetragon && swift, 'fixture pal/passive must exist');
+  const pre = checkPreflight({
+    ownedPals: [
+      { speciesIdx: jetragon.i, gender: 'MALE', passiveInternalNames: [] },
+      { speciesIdx: jetragon.i, gender: 'FEMALE', passiveInternalNames: [] },
+    ],
+    targetSpeciesIdx: jetragon.i,
+    desiredPassiveNames: [swift.internalName],
+    passiveInfoByName: (n) => ctx.passives.find(p => p.internalName === n),
+    genderRules: ctx.meta.genderSpecificRules,
+  });
+  assertEqual(pre.combiningImpossible, false, 'two owned Jetragons is a real pairing, not a dead end');
+  assertEqual(pre.blocked, false);
+});
+
+test('pre-flight: an ordinary (non-self-bred-only) species missing a passive is unaffected by combiningImpossible', () => {
+  const lamball = palByName('Lamball');
+  const swift = ctx.passives.find(p => p.name === 'Swift');
+  assert(lamball && swift, 'fixture pal/passive must exist');
+  const pre = checkPreflight({
+    ownedPals: [{ speciesIdx: lamball.i, gender: 'MALE', passiveInternalNames: [] }],
+    targetSpeciesIdx: lamball.i,
+    desiredPassiveNames: [swift.internalName],
+    passiveInfoByName: (n) => ctx.passives.find(p => p.internalName === n),
+    genderRules: ctx.meta.genderSpecificRules,
+  });
+  assertEqual(pre.combiningImpossible, false);
+  assertEqual(pre.blocked, false, 'Swift is random-allowed, so this is only "unlikely", not blocked');
+});
+
 test('special-cased pair: solver reaches Katress Ignis from two fixed-gender owned parents', () => {
   const katress = palByName('Katress');
   const wixen = palByName('Wixen');

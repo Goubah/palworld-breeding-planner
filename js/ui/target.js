@@ -124,6 +124,9 @@ export function initTargetTab(container, { onRun }) {
     } else if (!pre.reachableWithinSteps) {
       reachEl.className = 'error';
       reachEl.textContent = `✗ ${targetSpecies.name} needs at least ${plural(pre.minGenerations, 'breeding generation')}, but "Max breeding generations" is currently set to ${pre.maxSteps}. Raise it in Advanced Settings, then try again.`;
+    } else if (pre.minGenerations === 0 && pre.combiningImpossible) {
+      reachEl.className = 'error';
+      reachEl.textContent = `✗ ${targetSpecies.name}'s only breeding pair is two ${targetSpecies.name}s, and you own exactly one. A second can't be bred, so the one you have is all you'll ever get -- it would need every desired passive already on it.`;
     } else if (pre.minGenerations === 0) {
       reachEl.className = 'warn';
       reachEl.textContent = `⚠ You already own ${targetSpecies.name}, so no breeding is needed for the species itself. If yours is missing some of the desired passives, run the search anyway and it will breed a fresh one that combines them.`;
