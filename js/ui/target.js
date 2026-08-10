@@ -54,6 +54,21 @@ export function initTargetTab(container, { onRun }) {
   passivesRow.appendChild(grid);
   card.appendChild(passivesRow);
 
+  const clearPassivesBtn = document.createElement('button');
+  clearPassivesBtn.type = 'button';
+  clearPassivesBtn.className = 'btn btn-secondary';
+  clearPassivesBtn.textContent = 'Clear Passives';
+  // Each picker's clear() fires its own onChange(null), which is what
+  // actually updates desiredPassives and reruns the pre-flight checks -- see
+  // the picker's onChange above. Matches roster.js's clearPassives.
+  clearPassivesBtn.addEventListener('click', () => {
+    for (const p of passivePickers) p.clear();
+  });
+  const clearRow = document.createElement('div');
+  clearRow.className = 'form-row';
+  clearRow.appendChild(clearPassivesBtn);
+  card.appendChild(clearRow);
+
   container.appendChild(card);
 
   const preflightCard = document.createElement('div');
