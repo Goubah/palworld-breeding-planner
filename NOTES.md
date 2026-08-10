@@ -84,6 +84,14 @@ dangling key that crashes `reconstructRoute`.
 kind survives to be compared as finished plans. Deciding between them is the
 UI's job, in `route-model.js`.
 
+**`runSolver`'s `maleProbOf` option is a function, `(speciesIdx) => prob`, not
+the raw `maleProbBySpecies` array.** `worker.js` is the only caller in the
+shipped app and wraps the array into that closure before calling in; nothing
+enforces the shape at the call site, so passing the array directly doesn't
+fail until `pairGenderInfo` tries to call it, several frames deeper. Relevant
+whenever `runSolver` is called directly (bypassing the worker), e.g. to build
+a synthetic scenario in a test or a scratch script.
+
 ### Display
 
 **`ownedRefs` index into the `ownedPals` array the solver was given, not into
